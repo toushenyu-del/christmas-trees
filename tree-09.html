@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffd6e0">
+<title>糖果童话 · Candy Tower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --milk: #ffd6e0; --cream: #ffeef2; --ginger: #c98a4b; --mint: #9fe3c9; --cherry: #e8455a; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background:
+      radial-gradient(circle, rgba(255,255,255,.55) 0 3px, transparent 3.5px) 0 0 / 46px 46px,
+      radial-gradient(circle, rgba(255,255,255,.35) 0 2px, transparent 2.5px) 23px 23px / 46px 46px,
+      radial-gradient(ellipse 75% 65% at 50% 45%, #fff3f6 0%, #ffe1e8 55%, #ffc9d6 100%);
+    background-color: var(--milk); }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  #art, #fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #fx { pointer-events: none; }
+  #art { touch-action: manipulation; cursor: pointer; }
+  .title { font-family: 'Fredoka', 'Arial Rounded MT Bold', 'Varela Round', ui-rounded, sans-serif; font-weight: 700; fill: #fff; stroke: #e8455a; stroke-width: 9; paint-order: stroke; stroke-linejoin: round; letter-spacing: 1px; }
+  .hint { position: fixed; left: 0; right: 0; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 1.4vh); margin: 0; text-align: center; pointer-events: none;
+    font: 600 14px/1.4 'Fredoka', ui-rounded, 'PingFang SC', 'Noto Sans SC', sans-serif; letter-spacing: .08em; color: #c0435a; opacity: 0; transition: opacity 1.2s; }
+  .hint.on { opacity: .85; }
+  @media (prefers-reduced-motion: reduce) { .hint { display: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav light" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-08.html" aria-label="上一棵">‹</a><span>09/10</span><a class="arr" href="tree-10.html" aria-label="下一棵">›</a></nav>
+
+<svg id="art" role="img" aria-label="糖果童话风格的圣诞树：星形姜饼一层层叠成塔，淋着糖霜，旁边有拐杖糖、软糖和挥手的姜饼人；点树会果冻般晃动，点空白处会撒出会弹跳的糖粒" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="ging" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2a265"/><stop offset="1" stop-color="#bf7c40"/></linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c7f3e1"/><stop offset="1" stop-color="#7fd4b4"/></linearGradient>
+    <linearGradient id="mintSide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd4b4"/><stop offset="1" stop-color="#5bb996"/></linearGradient>
+    <linearGradient id="lemon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0a8"/><stop offset="1" stop-color="#ffc94d"/></linearGradient>
+    <radialGradient id="shadowG"><stop offset="0" stop-color="#b3405a" stop-opacity=".22"/><stop offset="1" stop-color="#b3405a" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#b3405a" flood-opacity=".22"/></filter>
+    <filter id="soft2" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#8a3a20" flood-opacity=".25"/></filter>
+  </defs>
+  <g id="scene"></g>
+</svg>
+<canvas id="fx" aria-hidden="true"></canvas>
+<p class="hint" id="hint">点点姜饼塔，或者点空白处撒糖</p>
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = id => document.getElementById(id);
+  const svg = $('art'), scene = $('scene'), fx = $('fx'), fctx = fx.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  if (touchOnly) $('hint').textContent = '戳戳姜饼塔，或者点空白处撒糖';
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const f = n => (Math.round(n * 10) / 10).toString();
+  let seed = 1224; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const SPR = ['#ff7aa2', '#7fd4ff', '#ffd45e', '#9fe3c9', '#c8a2ff', '#ffffff', '#ff9e6b'];
+
+  // ---------- art (in a 1000-wide design space) ----------
+  const COOKIES = 8, PLATE_Y = 800;
+  const cookies = [];
+  function starPath(cx, cy, R, r, rot, squash) {
+    const pts = [];
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + rot + i * Math.PI / 5, rr = i % 2 ? r : R; pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * squash]); }
+    // rounded star: vertices become control points, midpoints become anchors
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let d = `M${f(mid(pts[9], pts[0])[0])},${f(mid(pts[9], pts[0])[1])}`;
+    for (let i = 0; i < 10; i++) { const m = mid(pts[i], pts[(i + 1) % 10]); d += `Q${f(pts[i][0])},${f(pts[i][1])} ${f(m[0])},${f(m[1])}`; }
+    return { d: d + 'Z', pts };
+  }
+  function build() {
+    scene.innerHTML = ''; cookies.length = 0; seed = 1224;
+    // cake stand
+    const stand = el('g', {}, scene);
+    el('ellipse', { cx: 500, cy: PLATE_Y + 150, rx: 190, ry: 22, fill: 'url(#shadowG)' }, stand);
+    el('path', { d: `M430,${PLATE_Y + 40}C440,${PLATE_Y + 90} 455,${PLATE_Y + 110} 450,${PLATE_Y + 132}L550,${PLATE_Y + 132}C545,${PLATE_Y + 110} 560,${PLATE_Y + 90} 570,${PLATE_Y + 40}Z`, fill: 'url(#mintSide)' }, stand);
+    el('ellipse', { cx: 500, cy: PLATE_Y + 138, rx: 140, ry: 28, fill: 'url(#mintSide)' }, stand);
+    el('ellipse', { cx: 500, cy: PLATE_Y + 132, rx: 132, ry: 22, fill: 'url(#mint)' }, stand);
+    el('ellipse', { cx: 500, cy: PLATE_Y + 18, rx: 330, ry: 66, fill: 'url(#mintSide)' }, stand);
+    el('ellipse', { cx: 500, cy: PLATE_Y, rx: 330, ry: 62, fill: 'url(#mint)' }, stand);
+    let scallop = '';
+    for (let i = 0; i <= 28; i++) { const a = Math.PI * i / 28, x = 500 - Math.cos(a) * 330, y = PLATE_Y + 18 + Math.sin(a) * 66; scallop += `M${f(x)},${f(y)}a9,9 0 0 0 0,0`; el('circle', { cx: f(x), cy: f(y + 4), r: 7, fill: '#fff', opacity: '.9' }, stand); }
+    el('ellipse', { cx: 430, cy: PLATE_Y - 18, rx: 120, ry: 14, fill: '#fff', opacity: '.35' }, stand);
+    // candy canes leaning on the stand
+    const canes = el('g', { id: 'canes' }, scene);
+    for (const [x, rot, s] of [[190, -14, 1], [238, -4, 0.85]]) {
+      const g = el('g', { transform: `translate(${x},${PLATE_Y + 40}) rotate(${rot}) scale(${s})` }, canes);
+      const d = 'M0,0L0,-210A42,42 0 0 1 84,-210L84,-188';
+      el('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 26, 'stroke-linecap': 'round' }, g);
+      el('path', { d, fill: 'none', stroke: '#e8455a', 'stroke-width': 26, 'stroke-linecap': 'butt', 'stroke-dasharray': '14 16' }, g);
+      el('path', { d: 'M-6,-6L-6,-206', fill: 'none', stroke: '#fff', 'stroke-width': 5, opacity: '.55', 'stroke-linecap': 'round' }, g);
+    }
+    // the cookie tower
+    const tower = el('g', { id: 'tower' }, scene);
+    for (let k = 0; k < COOKIES; k++) {
+      const cy = PLATE_Y - 8 - k * 64, R = 238 - k * 25, r = R * 0.6, rot = (k % 2 ? Math.PI / 5 : 0) + (rnd() - 0.5) * 0.1, sq = 0.4, t = 20;
+      const outer = el('g', { class: 'cookie' }, tower);
+      const wob = el('g', {}, outer);
+      const side = starPath(500, cy + t, R, r, rot, sq), top = starPath(500, cy, R, r, rot, sq);
+      el('path', { d: side.d, fill: '#8d5428' }, wob);
+      el('path', { d: top.d, fill: 'url(#ging)' }, wob);
+      for (let i = 0; i < Math.round(R / 9); i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * R * 0.75; el('circle', { cx: f(500 + Math.cos(a) * d), cy: f(cy + Math.sin(a) * d * sq), r: f(1 + rnd() * 1.4), fill: '#9c5f2c', opacity: '.5' }, wob); }
+      // royal icing: piped outline, dots on the tips, drips over the front edges
+      const ic = starPath(500, cy, R * 0.84, r * 0.84, rot, sq);
+      el('path', { d: ic.d, fill: 'none', stroke: '#fffdf8', 'stroke-width': 7, 'stroke-linejoin': 'round', class: 'icing' }, wob);
+      top.pts.forEach((p, i) => {
+        if (i % 2) return;
+        el('circle', { cx: f(500 + (p[0] - 500) * 0.84), cy: f(cy + (p[1] - cy) * 0.84), r: 5.5, fill: '#fffdf8', class: 'icing' }, wob);
+        if (p[1] > cy + 2) { const L = 14 + rnd() * 22, x = p[0], y = p[1] + 2; el('path', { d: `M${f(x - 9)},${f(y - 4)}Q${f(x)},${f(y - 9)} ${f(x + 9)},${f(y - 4)}L${f(x + 6)},${f(y + L - 6)}A6,6 0 0 1 ${f(x - 6)},${f(y + L - 6)}Z`, fill: '#fffdf8', class: 'icing' }, wob); }
+      });
+      for (let i = 0; i < Math.round(R / 22); i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * R * 0.55, x = 500 + Math.cos(a) * d, y = cy + Math.sin(a) * d * sq; el('rect', { x: f(x - 1.6), y: f(y - 5), width: 3.2, height: 10, rx: 1.6, fill: SPR[i % SPR.length], transform: `rotate(${f(rnd() * 180)} ${f(x)} ${f(y)})` }, wob); }
+      cookies.push({ outer, wob, cy, R, x: 0, v: 0 });
+    }
+    // crown: a standing star cookie with lemon icing
+    const topY = PLATE_Y - 8 - (COOKIES - 1) * 64 - 70;
+    const crown = el('g', { id: 'crown' }, tower);
+    const cw = el('g', {}, crown);
+    const cs = starPath(500, topY + 6, 64, 34, 0, 1), cs2 = starPath(500, topY, 64, 34, 0, 1), cs3 = starPath(500, topY, 50, 26, 0, 1);
+    el('path', { d: cs.d, fill: '#8d5428' }, cw); el('path', { d: cs2.d, fill: 'url(#ging)' }, cw); el('path', { d: cs3.d, fill: 'url(#lemon)' }, cw);
+    el('path', { d: cs3.d, fill: 'none', stroke: '#fff', 'stroke-width': 5, 'stroke-linejoin': 'round' }, cw);
+    el('ellipse', { cx: 488, cy: topY - 14, rx: 10, ry: 6, fill: '#fff', opacity: '.7' }, cw);
+    cookies.push({ outer: crown, wob: cw, cy: topY, R: 60, x: 0, v: 0, crown: true });
+    // gumdrops on the plate
+    const drops = el('g', { id: 'drops' }, scene);
+    [[300, '#e8455a'], [372, '#ffd45e'], [628, '#7fd4ff'], [700, '#c8a2ff'], [770, '#9fe3c9']].forEach(([x, c], i) => {
+      const y = PLATE_Y + 14 + Math.abs(x - 500) * 0.04;
+      const g = el('g', { class: 'drop' }, drops);
+      el('path', { d: `M${x - 24},${y}C${x - 24},${y - 44} ${x + 24},${y - 44} ${x + 24},${y}Z`, fill: c }, g);
+      for (let k = 0; k < 7; k++) el('circle', { cx: f(x - 16 + rnd() * 32), cy: f(y - 6 - rnd() * 24), r: 1.6, fill: '#fff', opacity: '.75' }, g);
+      el('ellipse', { cx: x - 8, cy: y - 26, rx: 6, ry: 4, fill: '#fff', opacity: '.55' }, g);
+    });
+    // gingerbread man on the right, waving
+    const gm = el('g', { id: 'gman' }, scene);
+    const gx = 800, gy = PLATE_Y - 16;
+    const body = `M${gx - 26},${gy}L${gx - 34},${gy - 52}L${gx - 50},${gy - 70}Q${gx - 58},${gy - 84} ${gx - 44},${gy - 86}L${gx - 24},${gy - 80}Q${gx - 40},${gy - 104} ${gx - 34},${gy - 118}A36,36 0 1 1 ${gx + 34},${gy - 118}Q${gx + 40},${gy - 104} ${gx + 24},${gy - 80}L${gx + 24},${gy - 80}L${gx + 34},${gy - 52}L${gx + 26},${gy}Q${gx + 14},${gy + 6} ${gx + 8},${gy - 8}L${gx},${gy - 34}L${gx - 8},${gy - 8}Q${gx - 14},${gy + 6} ${gx - 26},${gy}Z`;
+    el('path', { d: body, fill: 'url(#ging)' }, gm);
+    const arm = el('g', { id: 'arm' }, gm);
+    el('path', { d: `M${gx + 22},${gy - 82}L${gx + 52},${gy - 108}Q${gx + 64},${gy - 116} ${gx + 66},${gy - 102}L${gx + 34},${gy - 66}Z`, fill: 'url(#ging)' }, arm);
+    el('path', { d: `M${gx + 52},${gy - 104}l10,-6`, stroke: '#fff', 'stroke-width': 4, 'stroke-linecap': 'round' }, arm);
+    el('circle', { cx: gx - 12, cy: gy - 126, r: 4.5, fill: '#3a1d0e' }, gm); el('circle', { cx: gx + 12, cy: gy - 126, r: 4.5, fill: '#3a1d0e' }, gm);
+    el('path', { d: `M${gx - 14},${gy - 110}Q${gx},${gy - 98} ${gx + 14},${gy - 110}`, fill: 'none', stroke: '#fff', 'stroke-width': 4, 'stroke-linecap': 'round' }, gm);
+    el('circle', { cx: gx - 22, cy: gy - 114, r: 5, fill: '#ff9eb3', opacity: '.8' }, gm); el('circle', { cx: gx + 22, cy: gy - 114, r: 5, fill: '#ff9eb3', opacity: '.8' }, gm);
+    el('circle', { cx: gx, cy: gy - 70, r: 6, fill: '#e8455a' }, gm); el('circle', { cx: gx, cy: gy - 50, r: 6, fill: '#9fe3c9' }, gm);
+    el('path', { d: `M${gx - 50},${gy - 76}l8,6M${gx - 22},${gy - 8}q4,6 10,0M${gx + 12},${gy - 8}q4,6 10,0`, fill: 'none', stroke: '#fff', 'stroke-width': 4, 'stroke-linecap': 'round' }, gm);
+    // the one line of type
+    const ty = Math.min(topY - 110, 96);
+    const title = el('text', { x: 500, y: f(ty), 'text-anchor': 'middle', class: 'title', 'font-size': 62, id: 'title' }, scene);
+    title.textContent = 'Merry Christmas';
+    ART = { top: ty - 60, bottom: PLATE_Y + 170, left: 120, right: 880 };
+  }
+  let ART;
+
+  // ---------- fit the design space to the screen ----------
+  let W, H, DPR, VB = { x: 0, y: 0, w: 1000, h: 1000 }, scale = 1;
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2);
+    fx.width = Math.round(W * DPR); fx.height = Math.round(H * DPR);
+    const aw = ART.right - ART.left, ah = ART.bottom - ART.top, asp = W / H;
+    let vw = Math.max(aw * (asp < 1 ? 0.96 : 1.08), ah * 1.06 * asp), vh = vw / asp;
+    VB = { x: 500 - vw / 2, y: (ART.top + ART.bottom) / 2 - vh / 2 + (asp < 1 ? vh * 0.02 : 0), w: vw, h: vh };
+    svg.setAttribute('viewBox', `${f(VB.x)} ${f(VB.y)} ${f(VB.w)} ${f(VB.h)}`);
+    scale = W / vw;
+  }
+  const toScreen = (x, y) => [(x - VB.x) * scale, (y - VB.y) * scale];
+  const toArt = (x, y) => [x / scale + VB.x, y / scale + VB.y];
+
+  // ---------- entrance: cookies drop in and squash ----------
+  const springEase = (() => {
+    const ok = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('animation-timing-function', 'linear(0, 1)');
+    if (!ok) return 'cubic-bezier(.3,1.5,.55,1)';
+    const z = 0.32, w = 15, wd = w * Math.sqrt(1 - z * z), pts = [];
+    for (let i = 0; i <= 44; i++) { const t = i / 44; pts.push((1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + z * w / wd * Math.sin(wd * t))).toFixed(3)); }
+    pts[44] = '1'; return `linear(${pts.join(',')})`;
+  })();
+  function intro() {
+    const fall = H / scale + 400;
+    $('canes').animate([{ transform: 'translateX(-420px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 900, delay: 150, easing: springEase, fill: 'backwards' });
+    document.querySelectorAll('.drop').forEach((d, i) => d.animate([{ transform: 'translateY(-60px) scale(.2)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 700, delay: 2500 + i * 90, easing: springEase, fill: 'backwards' }));
+    cookies.forEach((c, k) => {
+      c.outer.style.transformBox = 'fill-box'; c.outer.style.transformOrigin = '50% 100%';
+      c.outer.animate([
+        { transform: `translateY(${-fall}px)`, offset: 0 },
+        { transform: 'translateY(0) scale(1.14, .78)', offset: 0.42, easing: 'ease-out' },
+        { transform: 'translateY(-14px) scale(.95, 1.06)', offset: 0.62, easing: 'ease-in-out' },
+        { transform: 'translateY(0) scale(1.03, .97)', offset: 0.8 },
+        { transform: 'none', offset: 1 },
+      ], { duration: 820, delay: 300 + k * 190, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'backwards' });
+    });
+    const gm = $('gman'); gm.style.transformBox = 'fill-box'; gm.style.transformOrigin = '50% 100%';
+    gm.animate([{ transform: 'translateY(60px) scale(.3)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 800, delay: 2300, easing: springEase, fill: 'backwards' });
+    const tt = $('title'); tt.style.transformBox = 'fill-box'; tt.style.transformOrigin = '50% 50%';
+    tt.animate([{ transform: 'scale(.4)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 900, delay: 2700, easing: springEase, fill: 'backwards' });
+  }
+
+  // ---------- jelly wobble ----------
+  let wobbling = false;
+  function poke(k, dir) { cookies[k].v += dir * 260; wobbling = true; }
+  function stepWobble(dt) {
+    let energy = 0;
+    for (let k = 0; k < cookies.length; k++) {
+      const c = cookies[k], below = k ? cookies[k - 1].x : 0;
+      const a = -90 * (c.x - below * 0.92) - 6.5 * c.v;
+      c.v += a * dt; c.x += c.v * dt; energy += Math.abs(c.x) + Math.abs(c.v) * 0.05;
+    }
+    for (let k = 0; k < cookies.length; k++) {
+      const c = cookies[k], below = k ? cookies[k - 1].x : 0, tilt = (c.x - below) * 0.25;
+      c.wob.setAttribute('transform', `translate(${f(c.x)},0) rotate(${f(tilt)} 500 ${f(c.cy)})`);
+    }
+    if (energy < 0.05) { wobbling = false; cookies.forEach(c => { c.x = 0; c.v = 0; c.wob.removeAttribute('transform'); }); }
+  }
+
+  // ---------- particles: falling sprinkles, thrown candies ----------
+  const rain = Array.from({ length: touchOnly ? 36 : 64 }, () => ({ x: Math.random(), y: Math.random(), a: Math.random() * TAU, va: (Math.random() - 0.5) * 4, v: 0.05 + Math.random() * 0.07, c: SPR[(Math.random() * SPR.length) | 0], s: 0.8 + Math.random() * 0.6 }));
+  const toss = [];
+  function sprinkle(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = 260 + Math.random() * 520, gum = i % 9 === 0;
+      toss.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, a: Math.random() * TAU, va: (Math.random() - 0.5) * 16, c: gum ? ['#e8455a', '#ffd45e', '#7fd4ff', '#c8a2ff', '#9fe3c9'][i % 5] : SPR[i % SPR.length], gum, life: 0, rest: 0 });
+    }
+    while (toss.length > 220) toss.shift();
+  }
+  function drawRod(g, x, y, a, c, s) {
+    g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = c;
+    const w = 3.4 * s, h = 11 * s;
+    g.beginPath(); g.roundRect ? g.roundRect(-w / 2, -h / 2, w, h, w / 2) : g.rect(-w / 2, -h / 2, w, h); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.45)'; g.fillRect(-w * 0.15, -h * 0.35, w * 0.25, h * 0.5);
+    g.restore();
+  }
+  function drawGum(g, x, y, c, s) {
+    g.fillStyle = 'rgba(160,50,80,.18)'; g.beginPath(); g.ellipse(x, y + 2, 11 * s, 3 * s, 0, 0, TAU); g.fill();
+    g.fillStyle = c; g.beginPath(); g.moveTo(x - 11 * s, y); g.bezierCurveTo(x - 11 * s, y - 20 * s, x + 11 * s, y - 20 * s, x + 11 * s, y); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.6)'; g.beginPath(); g.ellipse(x - 4 * s, y - 11 * s, 3 * s, 2 * s, 0, 0, TAU); g.fill();
+  }
+  function floorAt(x) {    // candies land on the plate if above it, otherwise on the page bottom
+    const [px] = toArt(x, 0), dx = (px - 500) / 330;
+    if (Math.abs(dx) < 1) return toScreen(0, PLATE_Y - 4 + Math.sqrt(1 - dx * dx) * 40)[1];
+    return H - 18;
+  }
+  function drawFx(dt) {
+    const g = fctx; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    const vis = reduce ? 1 : clamp01((T - 1.2) / 1.5), s = Math.max(0.7, Math.min(1.3, scale * 1.6));
+    for (const p of rain) {
+      if (!reduce) { p.y += p.v * dt; p.a += p.va * dt; p.x += Math.sin(T + p.a) * dt * 0.004; if (p.y > 1.03) { p.y = -0.03; p.x = Math.random(); } }
+      g.globalAlpha = vis * 0.9; drawRod(g, p.x * W, p.y * H, p.a, p.c, p.s * s);
+    }
+    // sugar sparkles twinkling around the tower
+    for (let i = 0; i < 16; i++) {
+      const ph = T * 0.9 + i * 1.7, k = reduce ? (i % 3 === 0 ? 0.7 : 0) : Math.pow(Math.max(0, Math.sin(ph)), 6);
+      if (k < 0.02 || T < 3) continue;
+      const cyc = Math.floor(ph / Math.PI), u = ((i * 7919 + cyc * 104729) % 1000) / 1000, v = ((i * 6271 + cyc * 3491) % 1000) / 1000;
+      const ay = 230 + v * 560, half = (ay - 220) / 570 * 250 + 30, [x, y] = toScreen(500 + (u - 0.5) * 2 * half, ay);
+      const r = (5 + 7 * k) * s;
+      g.globalAlpha = k; g.strokeStyle = '#fff'; g.lineWidth = 1.6; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - r, y); g.lineTo(x + r, y); g.moveTo(x, y - r); g.lineTo(x, y + r); g.stroke();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, 1.8 * s, 0, TAU); g.fill();
+    }
+    g.globalAlpha = 1;
+    for (let i = toss.length - 1; i >= 0; i--) {
+      const p = toss[i]; p.life += dt;
+      if (p.rest > 2.4) { toss.splice(i, 1); continue; }
+      const fy = floorAt(p.x);
+      if (p.rest === 0) {
+        p.vy += 1500 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt;
+        if (p.y > fy && p.vy > 0) { p.y = fy; p.vy *= -0.42; p.vx *= 0.6; p.va *= 0.5; if (Math.abs(p.vy) < 60) { p.rest = 0.001; p.vy = 0; } }
+        if (p.x < 0 || p.x > W) p.vx *= -0.6;
+      } else p.rest += dt;
+      g.globalAlpha = p.rest > 1.6 ? clamp01(1 - (p.rest - 1.6) / 0.8) : 1;
+      if (p.gum) drawGum(g, p.x, p.y, p.c, s * 0.9); else drawRod(g, p.x, p.y, p.rest ? Math.round(p.a / Math.PI) * Math.PI + Math.PI / 2 : p.a, p.c, s);
+    }
+    g.globalAlpha = 1;
+  }
+
+  // ---------- loop ----------
+  let T = 0, t0 = 0, last = 0, interacted = false;
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.033, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    if (wobbling) stepWobble(dt);
+    // the gingerbread man waves every few seconds; the crown sways a little
+    const wave = (T % 5.5) < 1.3 && T > 3.2 ? Math.sin((T % 5.5) / 1.3 * Math.PI * 3) * 22 : 0;
+    $('arm').setAttribute('transform', `rotate(${f(wave)} 822 702)`);
+    drawFx(dt);
+    if (T > 5 && !interacted && !$('hint').dataset.done) { $('hint').dataset.done = 1; $('hint').classList.add('on'); setTimeout(() => $('hint').classList.remove('on'), 6000); }
+    requestAnimationFrame(loop);
+  }
+  svg.addEventListener('pointerdown', e => {
+    if (!interacted) { interacted = true; $('hint').classList.remove('on'); }
+    if (reduce) return;
+    const [ax, ay] = toArt(e.clientX, e.clientY);
+    // which cookie (if any) is under the pointer?
+    let hit = -1;
+    for (let k = cookies.length - 1; k >= 0; k--) { const c = cookies[k]; if (Math.abs(ax - 500) < c.R * 0.95 && ay > c.cy - c.R * 0.5 && ay < c.cy + c.R * 0.45 + 24) { hit = k; break; } }
+    if (hit >= 0) {
+      poke(Math.max(0, hit - 1), ax < 500 ? 1 : -1);
+      sprinkle(e.clientX, e.clientY, 14);
+    } else {
+      sprinkle(e.clientX, e.clientY, touchOnly ? 40 : 60);
+    }
+  });
+  build(); layout();
+  addEventListener('resize', () => { layout(); if (reduce) drawFx(0); });
+  if (reduce) { T = 9; drawFx(0); }
+  else { intro(); requestAnimationFrame(loop); }
+})();
+</script>
+</body>
+</html>

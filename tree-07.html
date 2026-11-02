@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6e0f18">
+<title>毛衣 · Knit</title>
+<style>
+  :root { --red: #9e1b24; --deep: #5a0c14; --cream: #f2e6d0; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--deep); }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #fx { touch-action: none; cursor: grab; }
+  #fx.press { cursor: grabbing; }
+  .hint { position: fixed; left: 0; right: 0; top: calc(max(10px, env(safe-area-inset-top)) + 1.2vh); margin: 0; text-align: center; pointer-events: none;
+    font: 600 13px/1.5 ui-rounded, 'SF Pro Rounded', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; letter-spacing: .14em;
+    color: var(--cream); text-shadow: 0 1px 3px rgba(40,0,6,.8); opacity: 0; transition: opacity 1.2s; }
+  .hint.on { opacity: .9; }
+  @media (prefers-reduced-motion: reduce) { .hint { display: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-06.html" aria-label="上一棵">‹</a><span>07/10</span><a class="arr" href="tree-08.html" aria-label="下一棵">›</a></nav>
+
+<canvas id="knit" role="img" aria-label="一件红色圣诞毛衣的正面，织着绿色圣诞树、奶白雪花和 MERRY XMAS 字样，几针金线闪光；按住布料会被撑开，点一下布料会荡一下"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+<p class="hint" id="hint">按住拉一拉布料，点一下让它荡一荡</p>
+<script>
+(() => {
+  'use strict';
+  const knit = document.getElementById('knit'), fx = document.getElementById('fx');
+  const kc = knit.getContext('2d'), fc = fx.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  const hint = document.getElementById('hint');
+  if (touchOnly) hint.textContent = '按住拉一拉布料，轻点让它荡一荡';
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  // palette: 0 red, 1 deep red, 2 green, 3 cream, 4 gold lurex, 5 bark
+  const COLS = ['#a51d27', '#701019', '#1f5a3a', '#f2e6d0', '#d8a93b', '#6b3a1e'];
+
+  // ---------- glyphs (5×7) ----------
+  const GLYPH = {
+    M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
+    E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
+    R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+    Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
+    X: ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
+    A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+    S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+  };
+  const FLAKE = ['...#...', '.#.#.#.', '..###..', '#######', '..###..', '.#.#.#.', '...#...'];
+  const STAR = ['..#..', '#####', '.###.', '.#.#.'];
+
+  let W, H, DPR, sw, sh, C, R, grid, ord, sprites, purl;
+  function chart() {
+    const portrait = H > W * 1.05;
+    sw = portrait ? Math.max(10, Math.floor(W / 32)) : Math.round(Math.max(12, Math.min(22, Math.min(W, H) / 46)));
+    sh = Math.round(sw * 0.84);
+    C = Math.ceil(W / sw) + 2; R = Math.ceil(H / sh) + 1;
+    grid = Array.from({ length: R }, () => new Uint8Array(C));
+    const put = (r, c, v) => { if (r >= 0 && r < R && c >= 0 && c < C) grid[r][c] = v; };
+    const cc = Math.floor((C - 1) / 2);
+    OX = W / 2 - (cc * sw + sw * 0.65);   // keep the centre column on the centre line
+    // hem: ribbing, then a zigzag band
+    const rib = 3, zz = R - rib - 4;
+    for (let r = R - rib; r < R; r++) for (let c = 0; c < C; c++) put(r, c, 1);
+    for (let c = 0; c < C; c++) { const m = c % 4; put(zz, c, m === 0 ? 3 : 0); put(zz + 1, c, m % 2 ? 3 : 0); put(zz + 2, c, m === 2 ? 3 : 0); }
+    // the words, knitted in
+    const lines = C >= 62 ? ['MERRY XMAS'] : ['MERRY', 'XMAS'];
+    const textTop = zz - 2 - lines.length * 8 + 1;
+    lines.forEach((L, li) => {
+      const width = L.length * 6 - 1; let c0 = cc - Math.floor(width / 2);
+      for (const ch of L) { const g = GLYPH[ch]; if (g) g.forEach((row, i) => [...row].forEach((v, j) => { if (v === '#') put(textTop + li * 8 + i, c0 + j, 3); })); c0 += 6; }
+    });
+    // snowflake band across the yoke
+    const sb = 1;
+    for (let c = 0; c < C; c++) { put(sb, c, c % 2 ? 3 : 0); put(sb + 8, c, c % 2 ? 0 : 3); }
+    for (let c0 = ((C - 7) % 10) >> 1; c0 + 7 <= C; c0 += 10) FLAKE.forEach((row, i) => [...row].forEach((v, j) => { if (v === '#') put(sb + 1 + i, c0 + j, 3); }));
+    // the tree fills everything in between
+    const tTop = sb + 10, tBot = textTop - 2;
+    const starRows = 4, trunk = 2, rows = Math.max(6, tBot - tTop + 1 - starRows - trunk);
+    STAR.forEach((row, i) => [...row].forEach((v, j) => { if (v === '#') put(tTop + i, cc - 2 + j, 4); }));
+    const t0 = tTop + starRows;
+    for (let r = 0; r < rows; r++) {
+      const tier = Math.floor(r / 5), hw = Math.min(Math.floor(C / 2) - 4, 2 * tier + (r % 5));
+      for (let c = -hw; c <= hw; c++) {
+        let v = 2;
+        if (((c + r) % 7 + 7) % 7 === 0 && Math.abs(c) < hw) v = 3;
+        if (r % 5 === 3 && Math.abs(c) === hw - 1 && hw > 2) v = r % 10 === 3 ? 4 : 0;
+        if (r % 5 === 1 && c === 0 && r > 2) v = 4;
+        put(t0 + r, cc + c, v);
+      }
+    }
+    for (let r = 0; r < trunk; r++) for (let c = -1; c <= 1; c++) put(t0 + rows + r, cc + c, 5);
+    for (let r = 0; r < R - rib; r++) for (let c = 0; c < C; c++) if (grid[r][c] === 0 && ((r * 13 + c * 7) % 23 === 0)) grid[r][c] = 1;
+    ord = [];
+    for (let r = R - 1; r >= 0; r--) { const rr = R - 1 - r; for (let k = 0; k < C; k++) ord.push([r, rr % 2 ? C - 1 - k : k]); }
+    RIB = rib;
+  }
+  let RIB = 3, OX = 0;
+
+  // ---------- stitch sprites ----------
+  function shade(hex, k) { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; r = Math.max(0, Math.min(255, r * k)); g = Math.max(0, Math.min(255, g * k)); b = Math.max(0, Math.min(255, b * k)); return `rgb(${r | 0},${g | 0},${b | 0})`; }
+  function makeSprite(hex, lurex) {
+    const cw = Math.ceil(sw * 1.3 * DPR), ch = Math.ceil(sh * 1.9 * DPR);
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const g = c.getContext('2d'); g.scale(DPR, DPR);
+    const cx = sw * 0.65, by = sh * 1.55;
+    for (const s of [-1, 1]) {
+      g.save(); g.translate(cx + s * sw * 0.2, by - sh * 0.62); g.rotate(s * 0.5);
+      const rx = sw * 0.25, ry = sh * 0.7;
+      const gr = g.createLinearGradient(-rx, -ry, rx * 0.6, ry);
+      gr.addColorStop(0, shade(hex, 1.32)); gr.addColorStop(0.45, shade(hex, 1.0)); gr.addColorStop(1, shade(hex, 0.62));
+      g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, rx, ry, 0, 0, TAU); g.fill();
+      g.strokeStyle = shade(hex, 0.5); g.lineWidth = Math.max(0.6, sw * 0.04); g.stroke();
+      g.strokeStyle = shade(hex, 0.78); g.lineWidth = Math.max(0.5, sw * 0.03);       // the yarn's twist
+      for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(-rx * 0.8, k * ry * 0.3 - ry * 0.1); g.lineTo(rx * 0.8, k * ry * 0.3 + ry * 0.12); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.18)'; g.beginPath(); g.ellipse(-rx * 0.25, -ry * 0.35, rx * 0.28, ry * 0.32, 0, 0, TAU); g.fill();
+      if (lurex) { g.fillStyle = 'rgba(255,248,210,.55)'; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc((k - 1) * rx * 0.35, (k - 1) * ry * 0.4, sw * 0.035, 0, TAU); g.fill(); } }
+      g.restore();
+    }
+    return c;
+  }
+  function makePurl(hex) {      // ribbing: purl bumps between knit columns
+    const cw = Math.ceil(sw * 1.3 * DPR), ch = Math.ceil(sh * 1.9 * DPR);
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const g = c.getContext('2d'); g.scale(DPR, DPR);
+    const gr = g.createLinearGradient(0, sh * 0.8, 0, sh * 1.5);
+    gr.addColorStop(0, shade(hex, 1.15)); gr.addColorStop(1, shade(hex, 0.6));
+    g.fillStyle = gr; g.beginPath(); g.ellipse(sw * 0.65, sh * 1.15, sw * 0.42, sh * 0.3, 0, 0, TAU); g.fill();
+    g.strokeStyle = shade(hex, 0.45); g.lineWidth = Math.max(0.6, sw * 0.04); g.stroke();
+    return c;
+  }
+
+  // ---------- drawing ----------
+  let disp = null;  // per-stitch displacement for the stretch interaction
+  function stitchXY(r, c) { return [c * sw + OX, r * sh]; }
+  function drawStitch(g, r, c, k, ox = 0, oy = 0, sc = 1) {
+    const v = grid[r][c];
+    const ribbing = r >= R - RIB && c % 2 === 1;
+    const img = ribbing ? purl : sprites[v];
+    const [x, y] = stitchXY(r, c);
+    const w = img.width / DPR, h = img.height / DPR;
+    if (k >= 1 && sc === 1) { g.drawImage(img, x + ox - sw * 0.0, y + oy - sh * 0.9, w, h); return; }
+    const s = sc * (k < 1 ? 0.4 + 0.6 * (1 + 1.6 * Math.pow(k - 1, 3) + 0.9 * Math.pow(k - 1, 2)) : 1);
+    const cx = x + ox + w * 0.5, cy = y + oy - sh * 0.9 + h * 0.82;
+    g.globalAlpha = Math.min(1, k * 2.5);
+    g.drawImage(img, cx - w * 0.5 * s, cy - h * 0.82 * s, w * s, h * s);
+    g.globalAlpha = 1;
+  }
+  function paintBase(g) {
+    g.fillStyle = '#4a0a11'; g.fillRect(0, 0, W, H);
+  }
+  function fuzz(g) {                 // wool halo: stray fibres over the whole fabric
+    for (let i = 0; i < W * H / 120; i++) {
+      const x = Math.random() * W, y = Math.random() * H, l = 2 + Math.random() * 6, a = Math.random() * TAU;
+      g.strokeStyle = Math.random() < 0.5 ? 'rgba(255,230,220,.10)' : 'rgba(40,0,6,.12)'; g.lineWidth = 0.5;
+      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 1) * l, y + Math.sin(a + 1) * l, x + Math.cos(a) * l * 1.4, y + Math.sin(a) * l * 1.4); g.stroke();
+    }
+  }
+  let base = null;   // fully knitted fabric, cached
+  function bake() {
+    base = document.createElement('canvas'); base.width = knit.width; base.height = knit.height;
+    const g = base.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    paintBase(g);
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) drawStitch(g, r, c, 1);
+    fuzz(g);
+  }
+
+  // ---------- state ----------
+  let T = 0, t0 = 0, last = 0, knitDone = reduce, interacted = false;
+  const press = { on: false, x: 0, y: 0, k: 0, hx: -999, hy: -999 };
+  const ripples = [];
+  let dirty = true;
+
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2);
+    for (const c of [knit, fx]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+    chart();
+    sprites = COLS.map((h, i) => makeSprite(h, i === 4));
+    purl = makePurl(COLS[1]);
+    bake();
+    lurexCells = [];
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (grid[r][c] === 4) lurexCells.push([r, c]);
+    dirty = true;
+  }
+  let lurexCells = [];
+
+  const KNIT_TIME = 3.2;
+  function drawKnitting() {
+    const g = kc; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    paintBase(g);
+    const n = ord.length, pos = (T - 0.25) / KNIT_TIME * n;
+    // finished rows come from the baked fabric; the active rows are drawn stitch by stitch
+    const doneRows = Math.max(0, Math.floor(pos / C) - 1);
+    if (doneRows > 0) {
+      const y0 = Math.max(0, (R - doneRows) * sh - sh * 0.9);
+      g.drawImage(base, 0, y0 * DPR, base.width, base.height - y0 * DPR, 0, y0, W, H - y0);
+    }
+    for (let i = doneRows * C; i < Math.min(n, Math.ceil(pos) + 1); i++) {
+      const k = clamp01((pos - i) / (C * 0.35));
+      if (k <= 0) continue;
+      const [r, c] = ord[i]; drawStitch(g, r, c, k);
+    }
+    // the knitting needle riding just above the working row
+    const row = Math.min(R - 1, Math.floor(pos / C)), wr = R - 1 - row, ny = wr * sh - sh * 1.05;
+    if (pos < n) {
+      const gr = g.createLinearGradient(0, ny - 5, 0, ny + 5);
+      gr.addColorStop(0, '#f1d9a8'); gr.addColorStop(0.5, '#d2a865'); gr.addColorStop(1, '#8a6232');
+      g.fillStyle = 'rgba(30,0,4,.35)'; g.fillRect(-10, ny + 4, W + 20, 4);
+      g.fillStyle = gr; g.beginPath(); g.roundRect ? g.roundRect(-10, ny - 4, W + 20, 8, 4) : g.rect(-10, ny - 4, W + 20, 8); g.fill();
+    }
+    if (pos >= n + C) { knitDone = true; dirty = true; }
+  }
+  function drawStretched() {
+    const g = kc; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    paintBase(g);
+    const R0 = Math.min(W, H) * 0.22;
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+      const [x, y] = stitchXY(r, c), px = x + sw * 0.5, py = y;
+      let ox = 0, oy = 0, sc = 1;
+      if (press.k > 0.001) {
+        const dx = px - press.x, dy = py - press.y, d = Math.hypot(dx, dy) + 0.01;
+        const f = Math.exp(-(d * d) / (R0 * R0)) * press.k;
+        ox += dx / d * f * sw * 1.6; oy += dy / d * f * sh * 1.6; sc += f * 0.35;
+      }
+      for (const w of ripples) {
+        const age = T - w.t, rad = age * 520, dd = Math.hypot(px - w.x, py - w.y) + 0.01, band = dd - rad;
+        const a = Math.exp(-band * band / 1800) * Math.max(0, 1 - age / 1.4) * 0.9;
+        ox += (px - w.x) / dd * a * sw * 0.5; oy += (py - w.y) / dd * a * sh * 0.5 + Math.sin(band * 0.05) * a * 4; sc += a * 0.12;
+      }
+      drawStitch(g, r, c, 1, ox, oy, sc);
+    }
+  }
+
+  // ---------- live overlay: lurex glints, floating fluff, snow ----------
+  const fluff = Array.from({ length: touchOnly ? 18 : 30 }, () => ({ x: Math.random(), y: Math.random(), a: Math.random() * TAU, s: 4 + Math.random() * 8, v: 0.004 + Math.random() * 0.01, spin: (Math.random() - 0.5) * 0.8, c: Math.random() < 0.6 ? 'rgba(242,230,208,.55)' : 'rgba(255,170,170,.4)' }));
+  const flakes = Array.from({ length: touchOnly ? 40 : 70 }, () => ({ x: Math.random(), y: Math.random(), z: 0.3 + Math.random() * 0.7, p: Math.random() * TAU }));
+  const glints = [];
+  function drawFx(dt) {
+    const g = fc; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    const vis = reduce ? 1 : clamp01((T - 1) / 1.5);
+    if (!reduce && knitDone && lurexCells.length && Math.random() < dt * 5) {
+      const [r, c] = lurexCells[(Math.random() * lurexCells.length) | 0], [x, y] = stitchXY(r, c);
+      glints.push({ x: x + sw * (0.4 + Math.random() * 0.4), y: y - sh * (0.1 + Math.random() * 0.5), t: T, s: sw * (0.35 + Math.random() * 0.3) });
+    }
+    g.globalCompositeOperation = 'lighter';
+    for (let i = glints.length - 1; i >= 0; i--) {
+      const k = (T - glints[i].t) / 0.7; if (k > 1) { glints.splice(i, 1); continue; }
+      const a = Math.sin(k * Math.PI), s = glints[i].s * a, x = glints[i].x, y = glints[i].y;
+      g.globalAlpha = a; g.strokeStyle = '#fff4cf'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x - s, y); g.lineTo(x + s, y); g.moveTo(x, y - s); g.lineTo(x, y + s); g.stroke();
+    }
+    g.globalCompositeOperation = 'source-over';
+    for (const f of fluff) {
+      if (!reduce) { f.y -= f.v * dt; f.x += Math.sin(T * 0.4 + f.a) * dt * 0.01; f.a += f.spin * dt; if (f.y < -0.03) { f.y = 1.03; f.x = Math.random(); } }
+      const x = f.x * W, y = f.y * H;
+      g.globalAlpha = vis; g.strokeStyle = f.c; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 1; k <= 4; k++) g.quadraticCurveTo(x + Math.cos(f.a + k) * f.s * 0.6, y + Math.sin(f.a + k * 1.3) * f.s * 0.6, x + Math.cos(f.a + k * 0.7) * f.s * k * 0.3, y + Math.sin(f.a + k * 0.9) * f.s * k * 0.3);
+      g.stroke();
+    }
+    for (const s of flakes) {
+      if (!reduce) { s.y += dt * 0.03 * s.z; s.x += Math.sin(T * 0.6 + s.p) * dt * 0.008; if (s.y > 1.02) { s.y = -0.02; s.x = Math.random(); } }
+      g.globalAlpha = (0.35 + 0.5 * s.z) * vis; g.fillStyle = '#fffaf2';
+      g.beginPath(); g.arc(s.x * W, s.y * H, 1 + s.z * 2.6, 0, TAU); g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+
+  function frame(dt) {
+    if (!knitDone) drawKnitting();
+    else {
+      const target = press.on ? 1 : 0;
+      press.k += (target - press.k) * Math.min(1, dt * (press.on ? 7 : 3.2));
+      for (let i = ripples.length - 1; i >= 0; i--) if (T - ripples[i].t > 1.6) ripples.splice(i, 1);
+      const moving = press.k > 0.004 || ripples.length;
+      if (moving) { drawStretched(); dirty = true; }
+      else if (dirty) { kc.setTransform(1, 0, 0, 1, 0, 0); kc.drawImage(base, 0, 0); dirty = false; }
+    }
+    drawFx(dt);
+  }
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    frame(dt);
+    if (knitDone && T > KNIT_TIME + 1.5 && !interacted && !hint.dataset.done) { hint.dataset.done = 1; hint.classList.add('on'); setTimeout(() => hint.classList.remove('on'), 6000); }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- interaction ----------
+  let downX = 0, downY = 0, downT = 0;
+  fx.addEventListener('pointerdown', e => {
+    if (!interacted) { interacted = true; hint.classList.remove('on'); }
+    downX = e.clientX; downY = e.clientY; downT = performance.now();
+    if (reduce || !knitDone) return;
+    press.on = true; press.x = e.clientX; press.y = e.clientY; fx.classList.add('press');
+    try { fx.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  fx.addEventListener('pointermove', e => { if (press.on) { press.x = e.clientX; press.y = e.clientY; } });
+  const up = e => {
+    if (!press.on) return;
+    press.on = false; fx.classList.remove('press');
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 8 && performance.now() - downT < 280) ripples.push({ x: e.clientX, y: e.clientY, t: T });
+  };
+  fx.addEventListener('pointerup', up); fx.addEventListener('pointercancel', up);
+
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); if (reduce || knitDone) { kc.setTransform(1, 0, 0, 1, 0, 0); kc.drawImage(base, 0, 0); } drawFx(0); }, 150); });
+  layout();
+  if (reduce) { kc.setTransform(1, 0, 0, 1, 0, 0); kc.drawImage(base, 0, 0); T = 9; drawFx(0); }
+  else requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

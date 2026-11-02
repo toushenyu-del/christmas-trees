@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>圣诞树十种</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;900&display=swap" rel="stylesheet">
+<style>
+  /* Layout: an exhibition catalogue. A heavy serif masthead, then ten exhibits hung in one row of five per line, each with a museum wall label. */
+  :root {
+    --wall: #e9e8e3;      /* gallery wall */
+    --ink: #1b1e21;       /* label type */
+    --muted: #5d6064;     /* medium line, notes */
+    --rule: #cbc9c1;      /* hairlines */
+    --frame: #d6d4cd;     /* thumbnail mat */
+    --accent: #b3312a;    /* cinnabar, the seal colour */
+    --display: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+    --body: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --wall: #15171a; --ink: #e8e6df; --muted: #9b9c98; --rule: #2d3034; --frame: #202327; --accent: #e2594d; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --wall: #15171a; --ink: #e8e6df; --muted: #9b9c98; --rule: #2d3034; --frame: #202327; --accent: #e2594d; color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--wall); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.6;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: clamp(28px, 6vw, 72px) clamp(28px, 5vw, 56px);
+  }
+  .wrap { max-width: 1480px; margin: 0 auto; display: grid; gap: clamp(28px, 4vw, 56px); }
+
+  .masthead { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 34rem); gap: clamp(16px, 4vw, 64px); align-items: end; border-bottom: 1px solid var(--rule); padding-bottom: clamp(20px, 3vw, 36px); }
+  h1 { margin: 0; font-family: var(--display); font-weight: 900; font-size: clamp(56px, 11vw, 168px); line-height: .92; letter-spacing: .02em; text-wrap: balance; }
+  .lede { margin: 0; font-size: clamp(15px, 1.3vw, 17px); color: var(--ink); max-width: 34rem; }
+  .lede span { display: block; color: var(--muted); font-size: 13px; margin-top: .8em; }
+
+  .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(28px, 2.6vw, 40px) clamp(16px, 2vw, 28px); }
+  @media (max-width: 1180px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 620px) { .grid { grid-template-columns: minmax(0, 1fr); } .masthead { grid-template-columns: minmax(0, 1fr); } }
+
+  .ex { display: grid; gap: 14px; align-content: start; color: inherit; text-decoration: none; min-width: 0; border-radius: 6px; }
+  .ex:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+  .frame { position: relative; margin: 0; aspect-ratio: 3 / 2; max-width: 100%; overflow: hidden; background: var(--frame); border-radius: 4px; }
+  .frame img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .6s cubic-bezier(.2,.7,.2,1), opacity .4s; }
+  .frame iframe { position: absolute; left: 0; top: 0; width: 1200px; height: 800px; border: 0; transform-origin: 0 0; pointer-events: none; opacity: 0; transition: opacity .5s; }
+  .frame iframe.on { opacity: 1; }
+  .ex:hover .frame img { transform: scale(1.025); }
+  .live { position: absolute; right: 8px; bottom: 8px; font-size: 11px; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; opacity: 0; transition: opacity .3s; }
+  .ex.playing .live { opacity: 1; }
+
+  .label { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-items: baseline; }
+  .no { font-family: var(--display); font-weight: 500; font-size: 15px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  h2 { margin: 0; font-family: var(--display); font-weight: 900; font-size: 21px; line-height: 1.25; text-wrap: balance; }
+  h2 i { font-style: normal; font-weight: 500; font-size: 14px; color: var(--muted); margin-left: .35em; }
+  .medium { grid-column: 2; margin: 0; font-size: 12.5px; color: var(--muted); letter-spacing: .02em; }
+  .desc { grid-column: 2; margin: 2px 0 0; font-size: 14px; line-height: 1.65; }
+
+  .notes { border-top: 1px solid var(--rule); padding-top: clamp(18px, 2.4vw, 28px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px clamp(16px, 3vw, 48px); font-size: 13.5px; color: var(--muted); }
+  .notes h3 { margin: 0 0 4px; font-family: var(--display); font-size: 15px; color: var(--ink); font-weight: 900; }
+  .notes p { margin: 0; max-width: 40rem; }
+  @media (max-width: 900px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+  @media (prefers-reduced-motion: reduce) { .frame img { transition: none; } .ex:hover .frame img { transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <h1>圣诞树十种</h1>
+    <p class="lede">十棵会动的圣诞树，用十种完全不同的手法做成：光、冰、纸、电、墨、金、毛线、星空、糖和几何。点开任意一棵，每一棵都能玩。<span>每一棵都是一个独立的 HTML 文件，双击就能在浏览器里打开。在电脑上把指针停在缩略图上，就能看到它在动。</span></p>
+  </header>
+
+  <main class="grid" id="grid">
+    <a class="ex" href="tree-01.html" data-src="tree-01.html">
+      <figure class="frame"><img src="thumbs/tree-01.jpg" alt="厚涂笔触画成的金色圣诞树，光带螺旋上升，背景是笔刷旋涡的夜空"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">01</span><h2>星尘<i>Stardust</i></h2>
+        <p class="medium">WebGL 粒子 + 厚涂笔触</p>
+        <p class="desc">金色星系旋转着坍缩成树，每颗光点下垫一笔厚颜料，背景是绕着星打旋的笔刷夜空；两条光带沿螺旋一直往上流。拖动旋转，点击炸开火花，双击整棵树散回星系再凝聚；打开「手势」后对着前置摄像头张开手掌，树散成金色的云，握拳又聚回来。</p></div>
+    </a>
+    <a class="ex" href="tree-02.html" data-src="tree-02.html">
+      <figure class="frame"><img src="thumbs/tree-02.jpg" alt="冰湖上的冰晶圣诞树，树顶雪花星迸出焰火，彗星拖着长尾绕树爬升"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">02</span><h2>冰晶<i>Frost</i></h2>
+        <p class="medium">WebGL 粒子与光迹，两万四千颗光点</p>
+        <p class="desc">冰湖荡开一圈涟漪，冰晶旋风贴着湖面往上盘，把树一层层织出来；彗星拖着长尾绕树爬升，撞上树顶就迸成焰火，光脉从树根流向枝梢。划过搅起漩涡，点击整棵树炸开再飞回，双击召来彗星雨和暴风雪。</p></div>
+    </a>
+    <a class="ex" href="tree-03.html" data-src="tree-03.html">
+      <figure class="frame"><img src="thumbs/tree-03.jpg" alt="折纸叶片组成的绿色圣诞树，红色纸盒做盆，纸鹤绕飞"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">03</span><h2>折纸<i>Origami</i></h2>
+        <p class="medium">WebGL 纸面着色，185 片折叶</p>
+        <p class="desc">一片片纸叶先展开再对折成树，纸鹤绕着飞，小灯串藏在叶间。指针就是台灯，挪动它，折痕的光影会跟着变；点一下，纸叶会重新折一遍。</p></div>
+    </a>
+    <a class="ex" href="tree-04.html" data-src="tree-04.html">
+      <figure class="frame"><img src="thumbs/tree-04.jpg" alt="霓虹线框圣诞树立在网格地平线上，旁边有竖排霓虹招牌"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">04</span><h2>霓虹线框<i>Neon Wireframe</i></h2>
+        <p class="medium">Canvas 线框，降采样辉光</p>
+        <p class="desc">像老 CRT 一样开机，线框树一圈圈描出来，港式竖排招牌接触不良地闪。左右拖动转树，点一下就是一次 RGB 撕裂故障。</p></div>
+    </a>
+    <a class="ex" href="tree-05.html" data-src="tree-05.html">
+      <figure class="frame"><img src="thumbs/tree-05.jpg" alt="宣纸上的水墨雪松，右侧题平安夜，钤朱印"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">05</span><h2>松雪图<i>Ink Pine</i></h2>
+        <p class="medium">Canvas 笔触模拟，宣纸洒金</p>
+        <p class="desc">一株雪松一笔一笔写出来，题款、盖印，墨点如雪飘落。点宣纸会滴一滴墨，晕开时留下一圈水痕。</p></div>
+    </a>
+    <a class="ex" href="tree-06.html" data-src="tree-06.html">
+      <figure class="frame"><img src="thumbs/tree-06.jpg" alt="黑底金线的装饰艺术圣诞树，阶梯拱门与放射光芒"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">06</span><h2>金箔<i>Art Deco</i></h2>
+        <p class="medium">SVG 描金线，共用一道金属渐变</p>
+        <p class="desc">二十年代的壁饰：金线从拱门描到树顶，七十二道光芒伸开。指针就是灯，高光跟着它扫过金面；点一下奏响一次光芒。</p></div>
+    </a>
+    <a class="ex" href="tree-07.html" data-src="tree-07.html">
+      <figure class="frame"><img src="thumbs/tree-07.jpg" alt="红色针织毛衣上织着绿色圣诞树和 MERRY XMAS"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">07</span><h2>毛衣<i>Knit</i></h2>
+        <p class="medium">Canvas 针目贴图，三千多针</p>
+        <p class="desc">一件圣诞毛衣从下往上一行行来回织出来，金线针目会闪。按住布料能把针目撑开，轻点一下整片布料荡开波纹。</p></div>
+    </a>
+    <a class="ex" href="tree-08.html" data-src="tree-08.html">
+      <figure class="frame"><img src="thumbs/tree-08.jpg" alt="极光下星星连成的圣诞树星座，雪山与湖面倒影"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">08</span><h2>星座极光<i>Aurora</i></h2>
+        <p class="medium">着色器极光，星图连线</p>
+        <p class="desc">北方夜空里的新星座 Arbor Natalis，极光帘幕流动，湖面倒映一切。指针靠近星星会显示星名，点一下划出流星，极光随之一亮。</p></div>
+    </a>
+    <a class="ex" href="tree-09.html" data-src="tree-09.html">
+      <figure class="frame"><img src="thumbs/tree-09.jpg" alt="粉色背景里的星形姜饼塔，拐杖糖和姜饼人"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">09</span><h2>糖果童话<i>Candy Tower</i></h2>
+        <p class="medium">SVG 分层，弹簧物理</p>
+        <p class="desc">星形姜饼一片片从天而降，落地压扁再弹起，叠成淋满糖霜的塔。点塔它会果冻般晃，点空白处撒出会弹跳的糖粒。</p></div>
+    </a>
+    <a class="ex" href="tree-10.html" data-src="tree-10.html">
+      <figure class="frame"><img src="thumbs/tree-10.jpg" alt="松绿底上骨白色三角组成的树，顶端一颗朱红圆点"><span class="live">实时</span></figure>
+      <div class="label"><span class="no">10</span><h2>三角与圆<i>Triangle &amp; Circle</i></h2>
+        <p class="medium">DOM 几何，滚动编排</p>
+        <p class="desc">三个三角、一个矩形、一颗红点，按四拍入场。往下滚动，构图在树、雪花、节拍之间重组，红点踩着拍子跳。</p></div>
+    </a>
+  </main>
+
+  <footer class="notes">
+    <div><h3>怎么看</h3><p>点任意一棵进入全屏。电脑用鼠标，手机用手指；每棵的玩法写在说明里，页面里也会短暂提示一次。</p></div>
+    <div><h3>没有网络时</h3><p>所有动画和交互都写在各自的文件里，不依赖任何外部脚本。只有字体来自 Google Fonts，断网时会换成系统字体，画面不受影响。</p></div>
+    <div><h3>减少动态效果</h3><p>系统开启「减少动态效果」后，每一棵都会直接显示一幅完成的静态画面。</p></div>
+  </footer>
+</div>
+<script>
+(() => {
+  'use strict';
+  const canHover = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!canHover || reduce) return;
+  // Live preview: after a short hover, the real page loads into the frame at 1200×800, scaled down.
+  let active = null, timer = 0;
+  function stop() {
+    clearTimeout(timer);
+    if (active) { const f = active.querySelector('iframe'); if (f) f.remove(); active.classList.remove('playing'); active = null; }
+  }
+  document.querySelectorAll('.ex').forEach(ex => {
+    ex.addEventListener('mouseenter', () => {
+      stop();
+      timer = setTimeout(() => {
+        const frame = ex.querySelector('.frame'), w = frame.clientWidth;
+        const f = document.createElement('iframe');
+        f.src = ex.dataset.src; f.title = '实时预览'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
+        f.style.transform = `scale(${w / 1200})`;
+        f.addEventListener('load', () => { f.classList.add('on'); ex.classList.add('playing'); });
+        frame.appendChild(f); active = ex;
+      }, 420);
+    });
+    ex.addEventListener('mouseleave', stop);
+  });
+})();
+</script>
+</body>
+</html>

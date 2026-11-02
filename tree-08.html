@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020617">
+<title>星座极光 · Aurora Constellation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet">
+<style>
+  :root { --night: #020617; --star: #eaf4ff; }
+  html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #fx { touch-action: manipulation; cursor: crosshair; }
+  .hint { position: fixed; left: 0; right: 0; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 1.6vh); margin: 0; text-align: center; pointer-events: none;
+    font: 15px/1.4 'Songti SC', 'Noto Serif SC', 'Cormorant Garamond', serif; letter-spacing: .12em; font-synthesis: none; color: rgba(220, 236, 255, .55); opacity: 0; transition: opacity 1.2s; }
+  .hint.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-07.html" aria-label="上一棵">‹</a><span>08/10</span><a class="arr" href="tree-09.html" aria-label="下一棵">›</a></nav>
+
+<canvas id="sky" aria-hidden="true"></canvas>
+<canvas id="land" aria-hidden="true"></canvas>
+<canvas id="fx" tabindex="0" role="img" aria-label="极光下的星座「Arbor Natalis」：星星连成一棵圣诞树，下方雪山与湖面倒映极光；指针靠近星星会显示星名，点击划出一颗流星"></canvas>
+<p class="hint" id="hint">靠近星星看它的名字，点一下许个愿</p>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  let sky = $('sky');
+  const land = $('land'), fx = $('fx');
+  const lc = land.getContext('2d'), fc = fx.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  if (touchOnly) $('hint').textContent = '轻触星星看它的名字，点空白处许个愿';
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  let seed = 4242; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let W, H, DPR, HZ, portrait;
+
+  // ================= aurora shader (half resolution) =================
+  let gl = null, prog, U = {};
+  try { gl = sky.getContext('webgl', { antialias: false, alpha: false, depth: false }); } catch (e) {}
+  const FS = `precision highp float;
+uniform vec2 uRes; uniform float uT, uHz, uBoost, uOn;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+vec3 aurora(vec2 p){
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    float yb = uHz + 0.17 + fi * 0.085 + 0.4 * (fbm(vec2(p.x * 1.3 + fi * 3.1, uT * 0.035 + fi * 1.7)) - 0.5) + 0.05 * sin(p.x * 1.4 + uT * 0.11 + fi * 2.0);
+    float d = p.y - yb;
+    if (d < -0.07) continue;
+    float lower = smoothstep(-0.07, 0.012, d) * (0.55 + 0.45 * vn(vec2(p.x * 3.0 + fi * 7.0, uT * 0.1)));
+    float up = exp(-max(d, 0.0) * (5.0 + fi * 2.2));
+    float rays = 0.45 + 0.55 * vn(vec2(p.x * 42.0 + fi * 13.0 + uT * 0.35, fi));
+    rays *= 0.6 + 0.4 * vn(vec2(p.x * 7.0 - uT * 0.18, fi * 5.0));
+    vec3 c = mix(vec3(0.16, 1.0, 0.62), vec3(0.22, 0.8, 0.9), smoothstep(0.0, 0.08, d));
+    c = mix(c, vec3(0.62, 0.32, 1.0), smoothstep(0.06, 0.26, d));
+    c = mix(c, vec3(1.0, 0.36, 0.7), smoothstep(0.22, 0.42, d) * 0.6);
+    float folds = smoothstep(0.28, 0.72, fbm(vec2(p.x * 0.85 + fi * 5.3 - uT * 0.03, uT * 0.05 + fi)));   // curtains gather and thin out along the sky
+    col += c * lower * up * rays * (0.4 + 1.1 * folds) * (0.62 - fi * 0.14);
+  }
+  return col;
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = uRes.x / uRes.y; vec2 p = vec2(uv.x * asp, uv.y);
+  vec3 skyc = mix(vec3(0.03, 0.08, 0.13), vec3(0.006, 0.01, 0.035), smoothstep(uHz, 1.0, uv.y));
+  skyc += vec3(0.02, 0.05, 0.06) * exp(-(uv.y - uHz) * 9.0);
+  vec3 col;
+  float boost = 1.0 + uBoost * 1.3;
+  if (uv.y >= uHz) col = skyc + aurora(p) * boost * uOn;
+  else {
+    float k = uHz - uv.y;
+    vec2 q = vec2(p.x + 0.006 * sin(uv.y * 520.0 + uT * 1.4) * (0.4 + k * 3.0), uHz + k * 1.1);
+    col = (skyc * 0.55 + aurora(q) * 0.42 * boost * uOn) * clamp(0.8 - k * 1.6, 0.15, 1.0);
+  }
+  col += (h21(gl_FragCoord.xy + uT) - 0.5) / 255.0;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  if (gl) {
+    try {
+      const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+      gl.useProgram(prog);
+      const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      for (const n of ['uRes', 'uT', 'uHz', 'uBoost', 'uOn']) U[n] = gl.getUniformLocation(prog, n);
+    } catch (e) { console.warn('Aurora shader unavailable, using a painted sky', e); gl = null; }
+  }
+  if (!gl) { const fresh = sky.cloneNode(false); sky.replaceWith(fresh); sky = fresh; }
+  const sky2d = gl ? null : sky.getContext('2d');
+  if (gl) { sky.addEventListener('webglcontextlost', e => e.preventDefault()); sky.addEventListener('webglcontextrestored', () => location.reload()); }
+
+  // ================= constellation =================
+  // tree-shaped asterism in unit space (x: -0.5..0.5, y: 0 bottom .. 1 top)
+  const CSTARS = [
+    { n: 'α', name: 'Stella', x: 0, y: 1.0, m: 1.0 },
+    { n: 'β', name: 'Ramus Dexter', x: 0.17, y: 0.76, m: 0.7 },
+    { n: 'γ', name: 'Nodus', x: 0.08, y: 0.77, m: 0.45 },
+    { n: 'δ', name: 'Ramus Medius', x: 0.31, y: 0.49, m: 0.75 },
+    { n: 'ε', name: 'Nix', x: 0.15, y: 0.51, m: 0.45 },
+    { n: 'ζ', name: 'Pes Dexter', x: 0.46, y: 0.18, m: 0.85 },
+    { n: 'η', name: 'Radix', x: 0.07, y: 0.17, m: 0.5 },
+    { n: 'θ', name: 'Truncus', x: 0.07, y: 0.02, m: 0.55 },
+    { n: 'ι', name: 'Truncus Minor', x: -0.07, y: 0.02, m: 0.5 },
+    { n: 'κ', name: 'Radix Sinistra', x: -0.07, y: 0.17, m: 0.5 },
+    { n: 'λ', name: 'Pes Sinister', x: -0.46, y: 0.18, m: 0.85 },
+    { n: 'μ', name: 'Glacies', x: -0.15, y: 0.51, m: 0.45 },
+    { n: 'ν', name: 'Ramus Laevus', x: -0.31, y: 0.49, m: 0.75 },
+    { n: 'ξ', name: 'Candela', x: -0.08, y: 0.77, m: 0.45 },
+    { n: 'ο', name: 'Ramus Summus', x: -0.17, y: 0.76, m: 0.7 },
+  ];
+  const ORN = [{ x: 0.02, y: 0.62, m: 0.35 }, { x: -0.12, y: 0.36, m: 0.35 }, { x: 0.16, y: 0.33, m: 0.32 }, { x: -0.02, y: 0.86, m: 0.3 }, { x: 0.27, y: 0.28, m: 0.28 }, { x: -0.25, y: 0.27, m: 0.3 }];
+  const ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0];
+  let CS = [], CX, CY, S;
+
+  // ================= static land layer: stars, mountains, shore pines, reflections =================
+  let twinklers = [];
+  function paintLand() {
+    const g = lc; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    seed = 99;
+    // milky way: a faint diagonal dust band
+    g.save(); g.translate(W * 0.5, HZ * 0.5); g.rotate(-0.5);
+    for (let i = 0; i < 120; i++) {
+      const x = (rnd() - 0.5) * Math.hypot(W, H), y = (rnd() - 0.5) * H * 0.18, r = 30 + rnd() * 90;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(150,170,255,.035)'); gr.addColorStop(1, 'rgba(150,170,255,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    g.restore();
+    twinklers = [];
+    const n = Math.round(W * HZ / (portrait ? 380 : 520));
+    for (let i = 0; i < n; i++) {
+      let x = rnd() * W, y = rnd() * HZ;
+      if (rnd() < 0.35) { const t = rnd() - 0.5, off = (rnd() - 0.5) * H * 0.16; x = W * 0.5 + Math.cos(-0.5) * t * W * 1.3 - Math.sin(-0.5) * off; y = HZ * 0.5 + Math.sin(-0.5) * t * W * 1.3 + Math.cos(-0.5) * off; }
+      if (y > HZ || y < 0 || x < 0 || x > W) continue;
+      const b = Math.pow(rnd(), 3), r = 0.35 + b * 1.3, col = rnd() < 0.2 ? '200,215,255' : rnd() < 0.15 ? '255,236,210' : '240,246,255';
+      if (b > 0.35 && rnd() < 0.6) { twinklers.push({ x, y, r, col, p: rnd() * TAU, s: 0.6 + rnd() * 2 }); continue; }
+      g.fillStyle = `rgba(${col},${0.25 + b * 0.75})`; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+    // mountains: two ranges with snowy ridges, plus their reflections in the lake
+    const range = (base, amp, freq, ph, fill, snow) => {
+      const pts = [];
+      for (let x = -20; x <= W + 20; x += 6) {
+        const n1 = Math.abs(Math.sin(x * freq + ph)) * 0.7 + Math.abs(Math.sin(x * freq * 2.7 + ph * 1.9)) * 0.3;
+        const n2 = Math.sin(x * freq * 7.3 + ph) * 0.06;
+        pts.push([x, base - Math.pow(n1, 1.6) * amp - n2 * amp]);
+      }
+      g.fillStyle = fill; g.beginPath(); g.moveTo(-20, HZ + 1); pts.forEach(p => g.lineTo(p[0], p[1])); g.lineTo(W + 20, HZ + 1); g.closePath(); g.fill();
+      g.strokeStyle = snow; g.lineWidth = 1.2; g.beginPath(); pts.forEach((p, i) => { if (p[1] < base - amp * 0.45) { i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); } else g.moveTo(p[0], p[1]); }); g.stroke();
+      // reflection
+      g.save(); g.globalAlpha = 0.55; g.fillStyle = fill; g.beginPath(); g.moveTo(-20, HZ); pts.forEach(p => g.lineTo(p[0], HZ + (HZ - p[1]) * 0.75)); g.lineTo(W + 20, HZ); g.closePath(); g.fill(); g.restore();
+      return pts;
+    };
+    range(HZ, H * 0.13, 0.0042, 0.8, '#071425', 'rgba(170,200,230,.22)');
+    range(HZ, H * 0.075, 0.0071, 2.6, '#030a14', 'rgba(150,185,220,.16)');
+    // shoreline with tiny pines echoing the tree above
+    g.fillStyle = '#01050b'; g.fillRect(0, HZ - 2, W, 4);
+    for (let x = 0; x < W; x += 9 + rnd() * 22) {
+      const h = 8 + rnd() * 22;
+      for (const dir of [1, -0.6]) {
+        g.globalAlpha = dir > 0 ? 1 : 0.4; g.fillStyle = '#01050b'; g.beginPath();
+        g.moveTo(x, HZ - h * dir); g.lineTo(x + h * 0.28, HZ); g.lineTo(x - h * 0.28, HZ); g.closePath(); g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+    // a darker lake toward the viewer
+    const lg = g.createLinearGradient(0, HZ, 0, H); lg.addColorStop(0, 'rgba(1,4,10,0)'); lg.addColorStop(1, 'rgba(1,4,10,.55)');
+    g.fillStyle = lg; g.fillRect(0, HZ, W, H - HZ);
+  }
+
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2); portrait = H > W * 1.05;
+    HZ = H * (portrait ? 0.79 : 0.76);
+    for (const c of [land, fx]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+    const sc = gl ? 0.75 : 0.5;
+    sky.width = Math.max(2, Math.round(W * sc * Math.min(DPR, 1.5))); sky.height = Math.max(2, Math.round(H * sc * Math.min(DPR, 1.5)));
+    if (gl) gl.viewport(0, 0, sky.width, sky.height);
+    S = portrait ? Math.min(H * 0.46, W * 0.8) : Math.min(H * 0.52, W * 0.7);
+    CX = W * 0.5; CY = (portrait ? H * 0.12 : H * 0.11) + S;          // bottom of the asterism
+    CS = CSTARS.map(s => ({ ...s, px: CX + s.x * S, py: CY - s.y * S }));
+    paintLand();
+  }
+
+  // ================= dynamic layer =================
+  const meteors = [], glints = [];
+  const ptr = { x: -999, y: -999 };
+  let boost = 0, boostAt = -9, holdUntil = 0;
+  const hov = { s: null, k: 0 };
+  function starGlow(g, x, y, r, a, spikes) {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r * 6);
+    gr.addColorStop(0, `rgba(235,245,255,${a})`); gr.addColorStop(0.15, `rgba(190,220,255,${a * 0.45})`); gr.addColorStop(1, 'rgba(160,200,255,0)');
+    g.fillStyle = gr; g.fillRect(x - r * 6, y - r * 6, r * 12, r * 12);
+    if (spikes) {
+      g.globalAlpha = a * 0.7; g.strokeStyle = 'rgba(225,240,255,1)'; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(x - r * 9, y); g.lineTo(x + r * 9, y); g.moveTo(x, y - r * 9); g.lineTo(x, y + r * 9); g.stroke(); g.globalAlpha = 1;
+    }
+  }
+  function goldStar(g, x, y, r, a) {     // warm ornaments inside the cold constellation
+    const gr = g.createRadialGradient(x, y, 0, x, y, r * 5);
+    gr.addColorStop(0, `rgba(255,236,190,${a})`); gr.addColorStop(0.2, `rgba(255,200,110,${a * 0.5})`); gr.addColorStop(1, 'rgba(255,190,90,0)');
+    g.fillStyle = gr; g.fillRect(x - r * 5, y - r * 5, r * 10, r * 10);
+  }
+  function launch(x, y, auto) {
+    const dir = x < W / 2 ? -1 : 1, a = 0.3 + rnd() * 0.35, sp = (auto ? 520 : 680) + rnd() * 260;
+    const vx = dir * Math.cos(a) * sp, vy = Math.sin(a) * sp, back = auto ? 0 : 0.42;   // start upstream so the streak passes through the tap
+    meteors.push({ x: x - vx * back, y: y - vy * back, vx, vy, life: 0, max: 1.15 + rnd() * 0.45, trail: [] });
+  }
+  function drawFx(dt) {
+    const g = fc; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    const sv = reduce ? 1 : clamp01(T / 1.4);
+    // twinkling field stars
+    for (const s of twinklers) {
+      const tw = reduce ? 0.8 : 0.55 + 0.45 * Math.sin(T * s.s + s.p);
+      g.globalAlpha = sv * tw; g.fillStyle = `rgb(${s.col})`; g.beginPath(); g.arc(s.x, s.y, s.r, 0, TAU); g.fill();
+    }
+    g.globalAlpha = 1;
+    // constellation: stars ignite, then the figure is traced
+    const lp = reduce ? 1 : clamp01((T - 2.2) / 2.6), lineP = lp < 0.5 ? 4 * lp * lp * lp : 1 - Math.pow(-2 * lp + 2, 3) / 2;
+    if (lineP > 0) {
+      const segs = ORDER.length - 1;
+      let total = 0; const lens = [];
+      for (let i = 0; i < segs; i++) { const a = CS[ORDER[i]], b = CS[ORDER[i + 1]], l = Math.hypot(b.px - a.px, b.py - a.py); lens.push(l); total += l; }
+      let left = lineP * total, tip = null;
+      g.beginPath();
+      for (let i = 0; i < segs && left > 0; i++) {     // constant pen speed: each segment takes time in proportion to its length
+        const a = CS[ORDER[i]], b = CS[ORDER[i + 1]], k = Math.min(1, left / lens[i]);
+        const x = a.px + (b.px - a.px) * k, y = a.py + (b.py - a.py) * k;
+        g.moveTo(a.px, a.py); g.lineTo(x, y); left -= lens[i]; tip = [x, y];
+      }
+      g.setLineDash([]); g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = 'rgba(170,215,255,.1)'; g.lineWidth = 7; g.stroke();     // soft glow under the figure
+      g.strokeStyle = 'rgba(215,236,255,.85)'; g.lineWidth = 1.8; g.stroke();
+      if (tip && lineP < 1) starGlow(g, tip[0], tip[1], 2.2, 0.95, false);   // the pen
+    }
+    let near = null, nd = touchOnly ? 46 : 60;
+    if (touchOnly && T > holdUntil) { ptr.x = ptr.y = -999; }
+    CS.forEach((s) => { const d = Math.hypot(ptr.x - s.px, ptr.y - s.py); if (d < nd) { nd = d; near = s; } });
+    if (near !== hov.s) { hov.s = near; hov.k = reduce ? 1 : 0; } else hov.k = reduce ? 1 : Math.min(1, hov.k + dt / 0.15);
+    CS.forEach((s, i) => {
+      const on = reduce ? 1 : clamp01((T - 1.0 - i * 0.085) / 0.5);
+      if (on <= 0) return;
+      const tw = reduce ? 0.9 : 0.8 + 0.2 * Math.sin(T * 1.7 + i);
+      const hovK = near === s ? 1 + 0.6 * hov.k : 1;
+      starGlow(g, s.px, s.py, (1 + s.m * 1.8) * hovK * (i === 0 ? 2 : 1), on * tw * (0.55 + s.m * 0.45), s.m > 0.68);
+      if (on < 1 && on > 0.05) { g.globalAlpha = (1 - on) * 0.8; g.strokeStyle = '#dff0ff'; g.lineWidth = 1; g.beginPath(); g.arc(s.px, s.py, 4 + on * 18, 0, TAU); g.stroke(); g.globalAlpha = 1; }
+    });
+    ORN.forEach((o, i) => { const on = reduce ? 1 : clamp01((T - 3.2 - i * 0.1) / 0.6); if (on > 0) goldStar(g, CX + o.x * S, CY - o.y * S, 1.4 + o.m * 2, on * (reduce ? 0.85 : 0.6 + 0.3 * Math.sin(T * 2.3 + i * 2))); });
+    // atlas labels
+    const lab = reduce ? 1 : clamp01((T - 4.2) / 1.2);
+    if (lab > 0) {
+      g.fillStyle = `rgba(200,225,255,${0.55 * lab})`; g.font = `500 ${Math.round(Math.max(10, S * 0.028))}px Cinzel, 'Trajan Pro', Georgia, serif`;
+      for (const s of CS) if (s.m >= 0.7) g.fillText(s.n, s.px + 9, s.py - 7);
+      const fs = Math.max(13, S * 0.045);
+      g.font = `400 ${Math.round(fs)}px Cinzel, 'Trajan Pro', Georgia, serif`; g.textAlign = 'center';
+      g.fillStyle = `rgba(214,232,255,${0.8 * lab})`;
+      if ('letterSpacing' in g) g.letterSpacing = `${Math.round(fs * 0.35)}px`;
+      g.fillText('ARBOR NATALIS', CX, CY + S * 0.13);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.textAlign = 'start';
+    }
+    // pointer: highlight and name the nearest star, tie the pointer into the figure
+    if (near) {
+      if (!touchOnly) { g.setLineDash([3, 5]); g.strokeStyle = 'rgba(200,230,255,.35)'; g.beginPath(); g.moveTo(ptr.x, ptr.y); g.lineTo(near.px, near.py); g.stroke(); g.setLineDash([]); }
+      g.font = `italic 15px 'Cormorant Garamond', Georgia, serif`; g.fillStyle = `rgba(230,242,255,${0.92 * hov.k})`;
+      const right = near.px > W * 0.6; g.textAlign = right ? 'right' : 'left';
+      g.fillText(`${near.n} Arboris · ${near.name}`, near.px + (right ? -14 : 14), near.py + 20); g.textAlign = 'start';
+    }
+    // meteors
+    if (!reduce && T > 6 && Math.random() < dt / 7) launch(W * (0.15 + Math.random() * 0.7), H * (0.05 + Math.random() * 0.2), true);
+    for (let i = meteors.length - 1; i >= 0; i--) {
+      const m = meteors[i]; m.life += dt;
+      if (m.life > m.max) { meteors.splice(i, 1); continue; }
+      m.x += m.vx * dt; m.y += m.vy * dt; m.trail.push([m.x, m.y]); if (m.trail.length > 26) m.trail.shift();
+      const k = 1 - m.life / m.max;
+      for (let j = 1; j < m.trail.length; j++) {
+        const a = j / m.trail.length;
+        g.strokeStyle = `rgba(220,240,255,${a * k * 0.9})`; g.lineWidth = a * 2.4;
+        g.beginPath(); g.moveTo(m.trail[j - 1][0], m.trail[j - 1][1]); g.lineTo(m.trail[j][0], m.trail[j][1]); g.stroke();
+      }
+      starGlow(g, m.x, m.y, 1.6, k, false);
+      if (Math.random() < 0.5) glints.push({ x: m.x, y: m.y, vx: (Math.random() - 0.5) * 40, vy: 20 + Math.random() * 40, life: 0, max: 0.6 + Math.random() * 0.5 });
+    }
+    // sparks shed by meteors, and diamond dust glittering over the lake
+    if (!reduce && Math.random() < dt * 9) glints.push({ x: Math.random() * W, y: HZ + Math.random() * (H - HZ) * 0.8, vx: 0, vy: -4, life: 0, max: 0.7 + Math.random() * 0.8, dust: true });
+    for (let i = glints.length - 1; i >= 0; i--) {
+      const p = glints[i]; p.life += dt; if (p.life > p.max) { glints.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const a = Math.sin(p.life / p.max * Math.PI);
+      g.globalAlpha = a * (p.dust ? 0.7 : 0.9); g.fillStyle = p.dust ? '#cfe9ff' : '#f2f8ff';
+      g.fillRect(p.x - 0.8, p.y - 0.8, 1.6, 1.6);
+      if (p.dust && a > 0.8) { g.globalAlpha = (a - 0.8) * 3; g.strokeStyle = '#e8f6ff'; g.lineWidth = 0.7; g.beginPath(); g.moveTo(p.x - 4, p.y); g.lineTo(p.x + 4, p.y); g.moveTo(p.x, p.y - 4); g.lineTo(p.x, p.y + 4); g.stroke(); }
+    }
+    g.globalAlpha = 1;
+  }
+
+  function drawSky() {
+    if (gl) {
+      gl.uniform2f(U.uRes, sky.width, sky.height); gl.uniform1f(U.uT, reduce ? 40 : T + 30);
+      gl.uniform1f(U.uHz, 1 - HZ / H); gl.uniform1f(U.uBoost, boost); gl.uniform1f(U.uOn, reduce ? 1 : clamp01((T - 0.3) / 2.2));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else {
+      const g = sky2d, w = sky.width, h = sky.height, hz = HZ / H * h;
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#010412'); gr.addColorStop(hz / h, '#0a1d2a'); gr.addColorStop(1, '#02060c');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      const ag = g.createLinearGradient(0, hz * 0.4, 0, hz * 0.85); ag.addColorStop(0, 'rgba(160,90,255,0)'); ag.addColorStop(0.6, 'rgba(60,255,170,.25)'); ag.addColorStop(1, 'rgba(60,255,170,0)');
+      g.fillStyle = ag; g.fillRect(0, hz * 0.4, w, hz * 0.45);
+    }
+  }
+
+  let T = 0, t0 = 0, last = 0, interacted = false;
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    const ba = T - boostAt; boost = ba < 0 ? 0 : ba < 0.2 ? Math.sin(ba / 0.2 * Math.PI / 2) : Math.exp(-(ba - 0.2) * 1.5);
+    drawSky(); drawFx(dt);
+    if (T > 6.5 && !interacted && !$('hint').dataset.done) { $('hint').dataset.done = 1; $('hint').classList.add('on'); setTimeout(() => $('hint').classList.remove('on'), 6000); }
+    requestAnimationFrame(loop);
+  }
+  fx.addEventListener('pointermove', e => { ptr.x = e.clientX; ptr.y = e.clientY; if (reduce) drawFx(0); });
+  fx.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; ptr.x = ptr.y = -999; if (reduce) drawFx(0); });
+  fx.addEventListener('pointerdown', e => {
+    if (!interacted) { interacted = true; $('hint').classList.remove('on'); }
+    ptr.x = e.clientX; ptr.y = e.clientY;
+    const onStar = CS.some(s => Math.hypot(s.px - e.clientX, s.py - e.clientY) < 40);
+    if (e.pointerType !== 'mouse') holdUntil = T + 3;
+    if (!reduce && !onStar) { launch(e.clientX, e.clientY, false); boostAt = T; }
+    if (reduce) drawFx(0);
+  });
+  fx.addEventListener('keydown', e => {       // keyboard: Enter/Space makes a wish, arrows walk through the stars' names
+    if ((e.key === 'Enter' || e.key === ' ') && !reduce) { e.preventDefault(); launch(W * (0.2 + Math.random() * 0.6), H * (0.12 + Math.random() * 0.15), false); boostAt = T; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); kbStar = (kbStar + (e.key === 'ArrowLeft' ? CS.length - 1 : 1)) % CS.length; ptr.x = CS[kbStar].px; ptr.y = CS[kbStar].py; holdUntil = T + 1e9; if (reduce) drawFx(0); }
+  });
+  let kbStar = -1;
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); if (reduce) { drawSky(); drawFx(0); } }, 150); });
+  layout();
+  if (reduce) { T = 20; drawSky(); drawFx(0); $('hint').textContent = touchOnly ? '轻触星星看它的名字' : '靠近星星看它的名字'; $('hint').classList.add('on'); }
+  else requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

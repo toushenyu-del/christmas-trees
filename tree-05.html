@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2ecdf">
+<title>松雪图 · Ink Pine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #f2ecdf; --ink: #16130f; --cinnabar: #b5302a; }
+  html, body { margin: 0; height: 100%; background: var(--paper); overflow: hidden; }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #mtn { opacity: 0; transition: opacity 2.4s ease .2s; }
+  .on #mtn { opacity: 1; }
+  #fx { touch-action: manipulation; cursor: crosshair; }
+  .calli { position: fixed; display: flex; flex-direction: row-reverse; gap: .5em; align-items: flex-start; pointer-events: none; }
+  .col { display: flex; flex-direction: column; align-items: center; font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', 'Kaiti SC', 'BiauKai', serif; color: var(--ink); line-height: 1.02; }
+  .col span { display: block; clip-path: inset(0 0 100% 0); }
+  .col span.w { animation: write .55s cubic-bezier(.3,.6,.4,1) forwards; }
+  .big { font-size: var(--big); opacity: .92; }
+  .small { font-size: var(--small); opacity: .78; margin-top: .4em; }
+  @keyframes write { to { clip-path: inset(0 0 -10% 0); } }
+  .seal { width: var(--seal); height: var(--seal); margin-top: .6em; align-self: flex-end; opacity: 0; transform: scale(1.35) rotate(-4deg); }
+  .seal.stamp { animation: stamp .5s cubic-bezier(.2,1.4,.4,1) forwards; }
+  @keyframes stamp { 0% { opacity: 0; transform: scale(1.35) rotate(-4deg); } 60% { opacity: 1; transform: scale(.96) rotate(-1deg); } 100% { opacity: .93; transform: scale(1) rotate(-1.5deg); } }
+  .hint { position: fixed; left: max(18px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); margin: 0; pointer-events: none;
+    font: 14px/1.4 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif; letter-spacing: .2em; color: rgba(22,19,15,.5); opacity: 0; transition: opacity 1.2s; }
+  .hint.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #mtn { transition: none; opacity: 1; } .col span { clip-path: none; } .seal { opacity: .93; transform: rotate(-1.5deg); } .hint { transition: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav light" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-04.html" aria-label="上一棵">‹</a><span>05/10</span><a class="arr" href="tree-06.html" aria-label="下一棵">›</a></nav>
+
+<canvas id="paper" aria-hidden="true"></canvas>
+<canvas id="mtn" aria-hidden="true"></canvas>
+<canvas id="paint" aria-hidden="true"></canvas>
+<canvas id="fx" role="img" aria-label="水墨画：一株覆雪的松树一笔笔写出，墨点如雪飘落，右侧题有「平安夜」并钤朱印；点击宣纸会滴下一滴墨晕开"></canvas>
+<div class="calli" id="calli" aria-hidden="true">
+  <div class="col big" id="big"><span>平</span><span>安</span><span>夜</span></div>
+  <div class="col small" id="ins1"><span>丙</span><span>午</span><span>冬</span></div>
+  <div class="col small" id="ins2"><span>写</span><span>雪</span><span>松</span><span>一</span><span>株</span>
+    <svg class="seal" id="seal" viewBox="0 0 100 100">
+      <defs><filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="4"/></filter>
+        <mask id="sm"><rect width="100" height="100" fill="#fff"/><text x="50" y="47" text-anchor="middle" font-family="Ma Shan Zheng, STKaiti, KaiTi, serif" font-size="40" fill="#000">圣</text><text x="50" y="88" text-anchor="middle" font-family="Ma Shan Zheng, STKaiti, KaiTi, serif" font-size="40" fill="#000">诞</text></mask></defs>
+      <rect x="4" y="4" width="92" height="92" rx="5" fill="#b5302a" mask="url(#sm)" filter="url(#rough)"/>
+    </svg>
+  </div>
+</div>
+<p class="hint" id="hint">点一下宣纸 滴一滴墨</p>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const paper = $('paper'), mtn = $('mtn'), paint = $('paint'), fx = $('fx');
+  const pc = paper.getContext('2d'), mc = mtn.getContext('2d'), kc = paint.getContext('2d'), fc = fx.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  let seed = 1225; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let W, H, DPR, portrait, tree;
+
+  // ---------- brush sprites ----------
+  function dotSprite(hard) {
+    const s = 32, c = document.createElement('canvas'); c.width = c.height = s;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(20,17,13,1)'); gr.addColorStop(hard ? 0.55 : 0.2, `rgba(20,17,13,${hard ? 0.9 : 0.55})`); gr.addColorStop(1, 'rgba(20,17,13,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, s, s); return c;
+  }
+  const HARD = dotSprite(true), SOFT = dotSprite(false);
+  const SNOW = (() => { const s = 64, c = document.createElement('canvas'); c.width = c.height = s; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(249,246,238,1)'); gr.addColorStop(0.55, 'rgba(247,243,234,.92)'); gr.addColorStop(1, 'rgba(247,243,234,0)'); g.fillStyle = gr; g.fillRect(0, 0, s, s); return c; })();
+  const RED = (() => { const s = 32, c = document.createElement('canvas'); c.width = c.height = s; const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(181,48,42,1)'); gr.addColorStop(0.6, 'rgba(181,48,42,.85)'); gr.addColorStop(1, 'rgba(181,48,42,0)'); g.fillStyle = gr; g.fillRect(0, 0, s, s); return c; })();
+
+  // ---------- paper, gold flecks, mountains ----------
+  let flecks = [];
+  function paintPaper() {
+    const g = pc; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.fillStyle = '#f2ecdf'; g.fillRect(0, 0, W, H);
+    // fibres and mottling of xuan paper
+    for (let i = 0; i < W * H / 260; i++) {
+      const x = rnd() * W, y = rnd() * H, l = 4 + rnd() * 26, a = rnd() * TAU;
+      g.strokeStyle = rnd() < 0.5 ? 'rgba(160,140,110,.08)' : 'rgba(255,255,250,.16)'; g.lineWidth = 0.6;
+      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.5) * l * 0.5, y + Math.sin(a + 0.5) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = rnd() * W, y = rnd() * H, r = 120 + rnd() * 320, gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(${rnd() < 0.5 ? '214,200,170' : '255,252,244'},${0.025 + rnd() * 0.03})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const v = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+    v.addColorStop(0, 'rgba(120,96,60,0)'); v.addColorStop(1, 'rgba(120,96,60,.16)');
+    g.fillStyle = v; g.fillRect(0, 0, W, H);
+    // sprinkled gold leaf (洒金)
+    flecks = [];
+    for (let i = 0; i < Math.round(W * H / 9000); i++) {
+      const pts = [], n = 4 + Math.floor(rnd() * 3), r = 0.8 + rnd() * 2.6;
+      for (let k = 0; k < n; k++) { const a = k / n * TAU + rnd() * 0.8; pts.push([Math.cos(a) * r * (0.6 + rnd() * 0.8), Math.sin(a) * r * (0.6 + rnd() * 0.8)]); }
+      flecks.push({ x: rnd() * W, y: rnd() * H, pts, p: rnd() * TAU, g: 0 });
+    }
+  }
+  function paintMountains() {
+    const g = mc; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    const ridge = (y0, amp, freq, phase, alpha, tone, blur) => {
+      g.save();
+      if ('filter' in g) g.filter = `blur(${blur}px)`;
+      const gr = g.createLinearGradient(0, y0 - amp * 1.2, 0, y0 + amp * 0.8);
+      gr.addColorStop(0, `rgba(${tone},${alpha})`); gr.addColorStop(0.45, `rgba(${tone},${alpha * 0.55})`); gr.addColorStop(1, `rgba(${tone},0)`);
+      g.fillStyle = gr; g.beginPath(); g.moveTo(-60, y0 + amp);
+      for (let x = -60; x <= W + 60; x += 8) {
+        const n = Math.sin(x * freq + phase) * 0.6 + Math.sin(x * freq * 2.3 + phase * 1.7) * 0.3 + Math.sin(x * freq * 6.1 + phase) * 0.1;
+        g.lineTo(x, y0 - Math.max(-0.1, n) * amp - amp * 0.2);
+      }
+      g.lineTo(W + 60, y0 + amp); g.closePath(); g.fill();
+      g.restore();
+    };
+    ridge(H * (portrait ? 0.74 : 0.7), H * 0.17, 0.0055, 1.2, 0.16, '120,128,124', 10);
+    ridge(H * (portrait ? 0.83 : 0.81), H * 0.12, 0.0085, 4.0, 0.2, '96,102,98', 6);
+    g.globalAlpha = 1;
+  }
+
+  // ---------- the painting, as a timed list of brush operations ----------
+  let ops = [], opIndex = 0;
+  function brushLine(pts, o) {  // pts: control points; o: {w0,w1,ink,dry,bristles,t0,dur}
+    // resample a Catmull-Rom curve through the control points
+    const path = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), n = Math.max(2, Math.ceil(len / 1.3));
+      for (let k = 0; k < n; k++) {
+        const t = k / n, t2 = t * t, t3 = t2 * t;
+        path.push([0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+                   0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)]);
+      }
+    }
+    path.push(pts[pts.length - 1]);
+    const B = o.bristles || 9, caps = Array.from({ length: B }, () => 0.75 + rnd() * 0.5), gaps = Array.from({ length: B }, () => rnd() * 100);
+    const N = path.length;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1), p = path[i], q = path[Math.min(N - 1, i + 1)], r = path[Math.max(0, i - 1)];
+      let nx = -(q[1] - r[1]), ny = q[0] - r[0]; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+      const press = Math.min(1, 0.55 + t * 4) * (1 - Math.pow(t, 3) * 0.85);
+      const w = (o.w0 + (o.w1 - o.w0) * t) * press;
+      const stamps = [];
+      for (let b = 0; b < B; b++) {
+        const load = caps[b] - t * (o.dry || 0.4) * (1.2 - caps[b]);
+        if (load <= 0.05) continue;
+        if (o.dry && Math.sin(gaps[b] + t * 7 * (1 + (b % 3) * 0.5)) > 1.12 - o.dry * t * 1.5) continue; // dry-brush streaks run along the stroke (飞白)
+        const off = (b / (B - 1) - 0.5) * w;
+        stamps.push([p[0] + nx * off, p[1] + ny * off, Math.max(0.6, w / B * 1.35), load * o.ink]);
+      }
+      ops.push({ t: o.t0 + o.dur * t, kind: 0, s: stamps });
+    }
+  }
+  function blob(x, y, r, a, t, sprite = SOFT, sx = 1) { ops.push({ t, kind: 1, x, y, r, a, sprite, sx }); }
+
+  function compose() {
+    ops = []; opIndex = 0; seed = 1225;
+    const Ht = portrait ? Math.min(H * 0.62, W * 1.25) : H * 0.74;
+    const bx = portrait ? W * 0.46 : W * 0.36, by = portrait ? H * 0.885 : H * 0.865;
+    tree = { bx, by, Ht };
+    // ground: a few broad, dry strokes
+    brushLine([[bx - Ht * 0.42, by + 4], [bx - Ht * 0.1, by + 1], [bx + Ht * 0.3, by + 5]], { w0: 7, w1: 4, ink: 0.28, dry: 0.9, bristles: 10, t0: 0.15, dur: 0.5 });
+    brushLine([[bx - Ht * 0.18, by + 12], [bx + Ht * 0.12, by + 10], [bx + Ht * 0.5, by + 14]], { w0: 5, w1: 2, ink: 0.18, dry: 1, bristles: 8, t0: 0.4, dur: 0.4 });
+    // trunk: one confident centre-tip stroke, base to crown, with flying white
+    const top = [bx + Ht * 0.01, by - Ht * 0.97];
+    brushLine([[bx - Ht * 0.008, by + 2], [bx + Ht * 0.012, by - Ht * 0.3], [bx - Ht * 0.008, by - Ht * 0.62], [top[0], top[1]]],
+      { w0: Ht * 0.026, w1: Ht * 0.005, ink: 0.95, dry: 0.32, bristles: 14, t0: 0.55, dur: 0.9 });
+    // a pale wash around the whole crown gives the tree air and depth (淡墨)
+    for (let k = 0; k < 26; k++) { const u = rnd(), yy = by - Ht * (0.1 + u * 0.8), ww = Ht * (0.06 + (1 - u) * 0.38); blob(bx + (rnd() - 0.5) * ww * 1.6, yy, ww * (0.5 + rnd() * 0.4), 0.035, 1.0 + rnd() * 2.6); }
+    // tiers, top to bottom
+    const tiers = 8, t0 = 1.35, step = 0.36;
+    const berries = [];
+    for (let i = 0; i < tiers; i++) {
+      const f = i / (tiers - 1), y = by - Ht * (0.9 - f * 0.78) + (rnd() - 0.5) * Ht * 0.02, tt = t0 + i * step;
+      for (const dir of [-1, 1]) {
+        const w = Ht * (0.07 + f * 0.36) * (0.84 + rnd() * 0.32);
+        const lean = (rnd() - 0.5) * 0.22;
+        const P = u => [bx + dir * w * u, y - w * 0.12 * Math.sin(u * Math.PI * 0.9) + w * (0.2 + lean) * u * u];
+        // wet ink mass hanging below the branch line
+        for (let k = 0; k < 22; k++) {
+          const u = k / 21, p = P(u), r = w * (0.15 - 0.08 * u) + 3;
+          blob(p[0] + (rnd() - 0.5) * r * 0.5, p[1] + r * (0.25 + rnd() * 0.35), r * (0.8 + rnd() * 0.4), 0.1 + rnd() * 0.1 + (1 - u) * 0.08, tt + u * 0.22 + (dir > 0 ? 0.12 : 0), k % 3 ? SOFT : HARD);
+        }
+        for (let k = 0; k < 6; k++) {   // dark accent dabs on the underside (点)
+          const u = 0.1 + rnd() * 0.8, p = P(u), r = 2.2 + rnd() * 3.5;
+          blob(p[0] + (rnd() - 0.5) * 10, p[1] + w * 0.05 + rnd() * w * 0.08, r, 0.75, tt + 0.3 + u * 0.2, HARD);
+        }
+        // the branch itself
+        brushLine([P(0), P(0.35), P(0.7), P(1.02)], { w0: Math.max(2.4, w * 0.045), w1: 0.8, ink: 0.9, dry: 0.3, bristles: 6, t0: tt + (dir > 0 ? 0.12 : 0), dur: 0.2 });
+        // needle clusters fanning downward
+        for (let k = 0; k < 9; k++) {
+          const u = 0.08 + k * 0.105 + rnd() * 0.04, p = P(u), L = w * (0.26 - 0.1 * u) + 6;
+          for (let j = 0; j < 7; j++) {
+            const a = Math.PI / 2 - dir * (0.25 + j * 0.2) + (rnd() - 0.5) * 0.2;
+            brushLine([[p[0], p[1]], [p[0] + Math.cos(a) * L * 0.55, p[1] + Math.sin(a) * L * 0.55], [p[0] + Math.cos(a) * L, p[1] + Math.sin(a) * L * 0.9]],
+              { w0: 2.0, w1: 0.5, ink: 0.95, dry: 0.2, bristles: 2, t0: tt + 0.06 + u * 0.24 + (dir > 0 ? 0.12 : 0), dur: 0.06 });
+          }
+        }
+        // snow resting on the branch: paper left white, a faint cold shadow beneath
+        for (let k = 0; k < 7; k++) {
+          if (rnd() < 0.18) continue;                       // leave a few gaps: snow never lies evenly
+          const u = 0.05 + k * 0.14 + (rnd() - 0.5) * 0.05, p = P(u), r = (w * (0.1 - 0.05 * u) + 3) * (0.6 + rnd() * 0.6);
+          blob(p[0], p[1] - r * (0.15 + rnd() * 0.25), r * 0.8, 0.88, tt + 0.5 + u * 0.15, SNOW, 2.1 + rnd() * 0.8);
+        }
+        if (i > 1 && i < tiers - 1 && rnd() < 0.7) berries.push([P(0.45 + rnd() * 0.4), tt + 0.8]);
+      }
+    }
+    // cinnabar berries, then a red bead at the crown
+    const tEnd = t0 + tiers * step + 0.6;
+    berries.forEach(([p], k) => { for (let j = 0; j < 3; j++) blob(p[0] + (rnd() - 0.5) * 9, p[1] + 8 + (rnd() - 0.5) * 7, 3.2 + rnd() * 1.6, 0.9, tEnd + k * 0.05, RED); });
+    blob(top[0], top[1] - 6, 6, 0.95, tEnd + 0.5, RED);
+    ops.sort((a, b) => a.t - b.t);
+    paintEnd = tEnd + 0.6;
+  }
+  let paintEnd = 5;
+  function runOps(upto) {
+    const g = kc; g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    while (opIndex < ops.length && ops[opIndex].t <= upto) {
+      const o = ops[opIndex++];
+      if (o.kind === 0) { for (const s of o.s) { g.globalAlpha = Math.min(1, s[3] * 0.55); g.drawImage(HARD, s[0] - s[2], s[1] - s[2], s[2] * 2, s[2] * 2); } }
+      else { g.globalAlpha = o.a; g.drawImage(o.sprite, o.x - o.r * o.sx, o.y - o.r, o.r * 2 * o.sx, o.r * 2); }
+    }
+    g.globalAlpha = 1;
+  }
+
+  // ---------- live layer: ink-dot snow, gold glints, ink drops ----------
+  const snow = Array.from({ length: touchOnly ? 55 : 95 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random(), p: Math.random() * TAU }));
+  const drops = [], splats = [];
+  const ptr = { x: -999, y: -999 };
+  function drawLive(dt) {
+    const g = fc; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    // ink drops blooming on wet paper
+    for (const d of drops) {
+      const age = T - d.t, grow = reduce ? 1 : 1 - Math.pow(1 - clamp01(age / 1.6), 3), fade = reduce ? 0.5 : 0.25 + 0.75 * Math.exp(-Math.max(0, age - 1.6) / 6);
+      for (const b of d.blobs) { g.globalAlpha = b.a * fade; const r = b.r * grow; g.drawImage(SOFT, d.x + b.ox * grow - r, d.y + b.oy * grow - r, r * 2, r * 2); }
+      g.globalAlpha = 0.2 * fade * grow; g.strokeStyle = '#16130f'; g.lineWidth = 1.2;
+      g.beginPath(); g.ellipse(d.x, d.y, d.R * grow * 1.02, d.R * grow * 0.96, d.rot, 0, TAU); g.stroke();   // darker tide line at the wet edge
+    }
+    for (let i = splats.length - 1; i >= 0; i--) {
+      const s = splats[i], k = clamp01((T - s.t) / 0.35);
+      const x = s.x + s.vx * (1 - Math.pow(1 - k, 2)), y = s.y + s.vy * (1 - Math.pow(1 - k, 2));
+      g.globalAlpha = 0.75; g.drawImage(HARD, x - s.r, y - s.r, s.r * 2, s.r * 2);
+    }
+    // gold leaf glinting as light (or the pointer) passes
+    for (const f of flecks) {
+      const near = Math.max(0, 1 - Math.hypot(f.x - ptr.x, f.y - ptr.y) / 140);
+      const glint = reduce ? 0.2 : Math.max(near, Math.pow(Math.max(0, Math.sin(T * 0.7 + f.p)), 18));
+      g.globalAlpha = 0.55 + 0.45 * glint;
+      g.fillStyle = glint > 0.5 ? '#f3d78a' : '#c9a24a';
+      g.beginPath(); f.pts.forEach((p, k) => k ? g.lineTo(f.x + p[0], f.y + p[1]) : g.moveTo(f.x + p[0], f.y + p[1])); g.fill();
+      if (glint > 0.6) { g.globalAlpha = (glint - 0.6) * 1.6; g.fillStyle = '#fff6d8'; g.beginPath(); g.arc(f.x, f.y, 1.2, 0, TAU); g.fill(); }
+    }
+    // falling ink-dot snow
+    const vis = reduce ? 1 : clamp01(T / 1.5);
+    for (const s of snow) {
+      if (!reduce) { s.y += dt * (0.012 + s.z * 0.025); s.x += Math.sin(T * 0.5 + s.p) * dt * 0.006; if (s.y > 1.02) { s.y = -0.02; s.x = Math.random(); } }
+      const r = 1.2 + s.z * 3.6;
+      g.globalAlpha = (0.22 + s.z * 0.38) * vis * clamp01((1 - s.y) * 6);
+      g.drawImage(s.z < 0.35 ? SOFT : HARD, s.x * W - r, s.y * H - r, r * 2, r * 2);
+    }
+    g.globalAlpha = 1;
+  }
+  function drip(x, y) {
+    const R = 22 + Math.random() * 26, blobs = [];
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * TAU, d = Math.random() * R * 0.45;
+      blobs.push({ ox: Math.cos(a) * d, oy: Math.sin(a) * d, r: R * (0.45 + Math.random() * 0.55), a: 0.05 + Math.random() * 0.07 });
+    }
+    blobs.push({ ox: 0, oy: 0, r: R * 0.45, a: 0.35 });
+    drops.push({ x, y, R, rot: Math.random() * TAU, blobs, t: T });
+    if (drops.length > 10) drops.shift();
+    for (let i = 0; i < 9; i++) { const a = Math.random() * TAU, d = R * (0.9 + Math.random() * 1.4); splats.push({ x, y, vx: Math.cos(a) * d, vy: Math.sin(a) * d, r: 0.8 + Math.random() * 2.2, t: T }); }
+    while (splats.length > 90) splats.shift();
+  }
+
+  // ---------- calligraphy placement ----------
+  function placeCalli() {
+    const c = $('calli'), big = portrait ? Math.min(W * 0.12, 56) : Math.min(H * 0.1, 92);
+    c.style.setProperty('--big', big + 'px'); c.style.setProperty('--small', big * 0.34 + 'px'); c.style.setProperty('--seal', big * 0.62 + 'px');
+    if (portrait) { c.style.right = W * 0.05 + 'px'; c.style.top = H * 0.05 + 'px'; c.style.left = 'auto'; }
+    else { c.style.right = W * 0.13 + 'px'; c.style.top = H * 0.14 + 'px'; c.style.left = 'auto'; }
+  }
+  function writeCalli(startDelay) {
+    const spans = [...document.querySelectorAll('#big span'), ...document.querySelectorAll('#ins1 span'), ...document.querySelectorAll('#ins2 span')];
+    spans.forEach((s, i) => { s.style.animationDelay = (startDelay + (i < 3 ? i * 0.42 : 1.4 + (i - 3) * 0.14)) + 's'; s.classList.add('w'); });
+    setTimeout(() => $('seal').classList.add('stamp'), (startDelay + 3.0) * 1000);
+  }
+
+  // ---------- loop ----------
+  let T = 0, t0 = 0, last = 0, interacted = false;
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2); portrait = H > W * 1.05;
+    for (const c of [paper, mtn, paint, fx]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+    seed = 77; paintPaper(); paintMountains(); compose(); placeCalli();
+    kc.setTransform(1, 0, 0, 1, 0, 0); kc.clearRect(0, 0, paint.width, paint.height);
+    runOps(reduce ? 1e9 : T);
+  }
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    if (opIndex < ops.length) runOps(T);
+    drawLive(dt);
+    if (T > paintEnd + 1.6 && !interacted && !$('hint').dataset.done) { $('hint').dataset.done = 1; $('hint').classList.add('on'); setTimeout(() => $('hint').classList.remove('on'), 6000); }
+    requestAnimationFrame(loop);
+  }
+  fx.addEventListener('pointermove', e => { ptr.x = e.clientX; ptr.y = e.clientY; });
+  fx.addEventListener('pointerleave', () => { ptr.x = ptr.y = -999; });
+  fx.addEventListener('pointerdown', e => {
+    if (!interacted) { interacted = true; $('hint').classList.remove('on'); }
+    ptr.x = e.clientX; ptr.y = e.clientY;
+    drip(e.clientX, e.clientY);
+    if (reduce) drawLive(0);
+  });
+  let rt = 0;
+  addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); if (reduce) drawLive(0); }, 150); });
+  layout();
+  document.body.classList.add('on');
+  if (reduce) { T = 99; drawLive(0); $('hint').classList.add('on'); }
+  else { writeCalli(4.2); requestAnimationFrame(loop); }
+})();
+</script>
+</body>
+</html>

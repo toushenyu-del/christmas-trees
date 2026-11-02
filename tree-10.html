@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f3b2c">
+<title>三角与圆 · Triangle &amp; Circle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;800&display=swap" rel="stylesheet">
+<style>
+  :root { --pine: #0f3b2c; --bone: #edeae0; --red: #f0412b; }
+  html { background: var(--pine); }
+  body { margin: 0; height: 400vh; background: var(--pine); color: var(--bone); -webkit-tap-highlight-color: transparent;
+    font-family: 'Schibsted Grotesk', 'Helvetica Neue', Arial, sans-serif; }
+  .stage { position: fixed; inset: 0; overflow: hidden; }
+  canvas, svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  svg { overflow: visible; }
+  .type { position: absolute; margin: 0; font-weight: 800; letter-spacing: -.02em; line-height: .92; }
+  .type small { display: block; font-weight: 500; letter-spacing: 0; font-size: .26em; line-height: 1.3; opacity: .7; margin-top: .55em; }
+  .meta { position: absolute; margin: 0; font-weight: 500; font-size: 13px; letter-spacing: .02em; opacity: .7; font-variant-numeric: tabular-nums; }
+  .rail { position: absolute; width: 2px; background: rgba(237, 234, 224, .16); }
+  .rail i { position: absolute; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--bone); }
+  .hint { position: absolute; margin: 0; font-weight: 500; font-size: 13px; opacity: 0; transition: opacity .8s; }
+  .hint.on { opacity: .8; }
+  @media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-09.html" aria-label="上一棵">‹</a><span>10/10</span><a class="arr" href="tree-01.html" aria-label="下一棵">›</a></nav>
+
+<div class="stage" id="stage">
+  <canvas id="grid" aria-hidden="true"></canvas>
+  <svg id="art" role="img" aria-label="极简几何圣诞树：三个三角形、一个矩形和一个朱红圆点；滚动页面，构图会在树、雪花、节拍之间重组">
+    <polygon id="t0" fill="#edeae0"/><polygon id="t1" fill="#edeae0"/><polygon id="t2" fill="#edeae0"/>
+    <rect id="trunk" fill="#edeae0"/>
+    <circle id="dot" fill="#f0412b"/>
+  </svg>
+  <p class="type" id="type">Merry<br>Christmas<small id="sub">Three triangles, one circle.</small></p>
+  <p class="meta" id="meta">24.12.2026</p>
+  <p class="meta" id="count">1 / 4</p>
+  <div class="rail" id="rail"><i id="knob"></i></div>
+  <p class="hint" id="hint">往下滚动，图形会重新组合</p>
+</div>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  if (touchOnly) $('hint').textContent = '向上滑动，图形会重新组合';
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const grid = $('grid'), gctx = grid.getContext('2d');
+  let W, H, DPR, portrait, U, M, COL;
+  const NAMES = ['Tree', 'Snowflake', 'Beat', 'Tree'];
+  const SUBS = ['Three triangles, one circle.', 'Turned a third each way.', 'Counted out in four.', 'And back again.'];
+
+  // ---------- compositions: each shape = {x, y, r(rot), s(scale)} ----------
+  // triangles are isosceles, apex up, defined by width w and height h around their own centre
+  let shapes;
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2); portrait = H > W * 1.05;
+    grid.width = Math.round(W * DPR); grid.height = Math.round(H * DPR);
+    M = Math.max(18, Math.min(W, H) * 0.045);           // outer margin
+    COL = (W - 2 * M) / 12;                              // 12-column grid
+    U = portrait ? W * 0.84 : Math.min(H * 0.86, W * 0.5);
+    const cx = portrait ? W * 0.5 : M + COL * 4.5, base = portrait ? H * 0.66 : H * 0.84;
+    const tri = [{ w: 0.66, h: 0.36 }, { w: 0.5, h: 0.3 }, { w: 0.35, h: 0.25 }];
+    // state A: the tree
+    const trunkH = U * 0.08, b0 = base - trunkH, b1 = b0 - U * 0.2, b2 = b1 - U * 0.17;
+    const tree = {
+      t: [{ x: cx, y: b0 - tri[0].h * U / 2, r: 0, s: 1 }, { x: cx, y: b1 - tri[1].h * U / 2, r: 0, s: 1 }, { x: cx, y: b2 - tri[2].h * U / 2, r: 0, s: 1 }],
+      k: { x: cx, y: base - trunkH / 2, r: 0, sx: 1, sy: 1 },
+      d: { x: cx, y: b2 - tri[2].h * U - U * 0.045, s: 1 },
+    };
+    // state B: a three-fold snowflake around the circle
+    const sc = portrait ? [W * 0.5, H * 0.42] : [M + COL * 6, H * 0.46], R = U * 0.25;
+    const flake = { t: [0, 1, 2].map(i => { const a = -Math.PI / 2 + i * TAU / 3; return { x: sc[0] + Math.cos(a) * R, y: sc[1] + Math.sin(a) * R, r: (a + Math.PI / 2) * 180 / Math.PI, s: [0.5, 0.66, 0.94][i] }; }),
+      k: { x: sc[0], y: sc[1], r: 45, sx: 0.55, sy: 0.55 * 0.875 }, d: { x: sc[0], y: sc[1], s: 1.6 } };
+    // state C: a beat — three peaks on a baseline, the dot bouncing between them
+    const bl = portrait ? H * 0.6 : H * 0.72, xs = portrait ? [W * 0.2, W * 0.5, W * 0.8] : [M + COL * 2.5, M + COL * 6, M + COL * 9.5];
+    const beatS = portrait ? [0.48, 0.78, 0.6] : [0.62, 1, 0.78];
+    const beat = { t: [0, 1, 2].map(i => ({ x: xs[i], y: bl - tri[i].h * U * beatS[i] / 2 * (i === 1 ? 1 : 1), r: 0, s: beatS[i] * [1, 1.32, 1.85][i] * (portrait ? 0.62 : 1) })),
+      k: { x: W / 2, y: bl + 3, r: 0, sx: (W - 2 * M) / (U * 0.07), sy: 6 / (U * 0.08) }, d: { x: xs[1], y: bl - U * 0.5, s: 1 } };
+    beat.t.forEach((t, i) => { t.y = bl - tri[i].h * U * t.s / 2; });
+    shapes = { tri, trunk: { w: U * 0.07, h: U * 0.08 }, dotR: U * 0.045, states: [tree, flake, beat, tree], beatXs: xs, beatBase: bl };
+    placeType();
+  }
+  function placeType() {
+    const t = $('type'), fs = portrait ? Math.min(W * 0.15, 64) : Math.min(H * 0.1, W * 0.06, 104);
+    t.style.fontSize = fs + 'px';
+    if (portrait) { t.style.left = M + 'px'; t.style.right = 'auto'; t.style.bottom = (M + 8) + 'px'; t.style.top = 'auto'; t.style.textAlign = 'left'; }
+    else { t.style.left = 'auto'; t.style.right = M + 'px'; t.style.bottom = M + 'px'; t.style.top = 'auto'; t.style.textAlign = 'right'; }
+    const meta = $('meta'), cnt = $('count'), rail = $('rail'), hint = $('hint');
+    const navR = (document.querySelector('.tnav')?.getBoundingClientRect().right || 0) + 14;
+    meta.style.left = Math.max(M, navR) + 'px'; meta.style.top = M + 'px';
+    cnt.style.right = M + 'px'; cnt.style.top = M + 'px';
+    rail.style.right = M + 'px'; rail.style.top = (M + 34) + 'px'; rail.style.height = (portrait ? H * 0.22 : H * 0.3) + 'px';
+    hint.style.left = Math.max(M, navR) + 'px'; hint.style.top = (M + 26) + 'px';
+  }
+
+  // ---------- drawing ----------
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const lerp = (a, b, t) => a + (b - a) * t;
+  function triPts(i, x, y, r, s) {
+    const w = shapes.tri[i].w * U * s, h = shapes.tri[i].h * U * s, c = Math.cos(r * Math.PI / 180), sn = Math.sin(r * Math.PI / 180);
+    const P = [[0, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]].map(([px, py]) => [x + px * c - py * sn, y + px * sn + py * c]);
+    return P.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  }
+  function compose(p, T, intro) {
+    // p in [0,3]: which composition, fractional = in transition
+    const i0 = Math.min(2, Math.floor(p)), k = reduce ? Math.round(p - i0) : ease(clamp01(p - i0));
+    const A = shapes.states[i0], B = shapes.states[i0 + 1];
+    const tk = (a, b) => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), r: lerp(a.r, b.r, k), s: lerp(a.s, b.s, k) });
+    for (let i = 0; i < 3; i++) {
+      const s = tk(A.t[i], B.t[i]);
+      // entrance: each triangle arrives on its own beat, from its own side
+      const e = intro[i], from = [[-W * 0.7, 0], [W * 0.7, 0], [0, -H * 0.9]][i];
+      $('t' + i).setAttribute('points', triPts(i, s.x + from[0] * (1 - e), s.y + from[1] * (1 - e), s.r, s.s));
+    }
+    const kk = { x: lerp(A.k.x, B.k.x, k), y: lerp(A.k.y, B.k.y, k), r: lerp(A.k.r, B.k.r, k), sx: lerp(A.k.sx, B.k.sx, k), sy: lerp(A.k.sy, B.k.sy, k) };
+    const tw = shapes.trunk.w * kk.sx, th = shapes.trunk.h * kk.sy * intro[3];
+    const tr = $('trunk');
+    tr.setAttribute('x', (kk.x - tw / 2).toFixed(1)); tr.setAttribute('y', (kk.y + shapes.trunk.h * kk.sy / 2 - th).toFixed(1));
+    tr.setAttribute('width', tw.toFixed(1)); tr.setAttribute('height', Math.max(0, th).toFixed(1));
+    tr.setAttribute('transform', `rotate(${kk.r.toFixed(2)} ${kk.x.toFixed(1)} ${kk.y.toFixed(1)})`);
+    // the dot: in the beat composition it hops from peak to peak in time
+    let dx = lerp(A.d.x, B.d.x, k), dy = lerp(A.d.y, B.d.y, k), ds = lerp(A.d.s, B.d.s, k);
+    const inBeat = 1 - Math.min(1, Math.abs(p - 2) * 1.6);
+    if (inBeat > 0 && !reduce) {
+      const beatT = T / 0.6, n = Math.floor(beatT), f = beatT - n, xs = shapes.beatXs, order = [0, 1, 2, 1];
+      const a = order[n % 4], b = order[(n + 1) % 4];
+      const st = shapes.states[2].t;
+      const ya = st[a].y - shapes.tri[a].h * U * st[a].s / 2 - shapes.dotR, yb = st[b].y - shapes.tri[b].h * U * st[b].s / 2 - shapes.dotR;
+      const hx = lerp(xs[a], xs[b], f), hy = lerp(ya, yb, f) - Math.sin(f * Math.PI) * U * 0.22;
+      dx = lerp(dx, hx, inBeat); dy = lerp(dy, hy, inBeat);
+    }
+    const d = $('dot');
+    const drop = intro[4];
+    const pulse = reduce ? 1 : 1 + 0.035 * Math.pow(Math.max(0, Math.cos((T % 0.6) / 0.6 * Math.PI)), 8);
+    d.setAttribute('cx', dx.toFixed(1)); d.setAttribute('cy', (dy - (1 - drop) * H * 0.7).toFixed(1));
+    d.setAttribute('r', (shapes.dotR * ds * pulse * (drop > 0 ? 1 : 0)).toFixed(2));
+    const idx = Math.min(3, Math.round(p));
+    $('count').textContent = `${idx + 1} / 4`;
+    $('sub').textContent = SUBS[idx];
+    $('knob').style.top = `calc(${(p / 3 * 100).toFixed(2)}% - 4px)`;
+  }
+
+  // ---------- particles: square flakes falling down the grid columns, in time ----------
+  const flakes = [];
+  let lastBeat = -1;
+  function drawGrid(dt, T, vel) {
+    const g = gctx; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+    // faint column rules
+    g.fillStyle = 'rgba(237,234,224,.045)';
+    for (let i = 0; i <= 12; i++) g.fillRect(Math.round(M + i * COL), 0, 1, H);
+    if (reduce) return;
+    const beat = Math.floor(T / 0.6);
+    if (beat !== lastBeat && T > 2) {
+      lastBeat = beat;
+      for (let k = 0; k < (portrait ? 2 : 3); k++) flakes.push({ c: Math.floor(Math.random() * 13), y: -10, v: 40 + Math.random() * 30, s: Math.random() < 0.25 ? 6 : 3 });
+    }
+    for (let i = flakes.length - 1; i >= 0; i--) {
+      const f = flakes[i]; f.y += (f.v + Math.abs(vel) * 900) * dt;
+      if (f.y > H + 10) { flakes.splice(i, 1); continue; }
+      const x = M + f.c * COL;
+      g.fillStyle = `rgba(237,234,224,${f.s > 4 ? 0.55 : 0.4})`;
+      g.fillRect(Math.round(x - f.s / 2), Math.round(f.y), f.s, f.s);
+    }
+  }
+
+  // ---------- timeline ----------
+  let T = 0, t0 = 0, last = 0, cur = 0, target = 0, scrolled = false;
+  const intro = [0, 0, 0, 0, 0];
+  const backOut = t => t <= 0 ? 0 : t >= 1 ? 1 : 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
+  function readScroll() {
+    const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+    target = clamp01(scrollY / max) * 3;
+  }
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    const beat = 0.24;
+    for (let i = 0; i < 4; i++) intro[i] = backOut(clamp01((T - 0.2 - i * beat) / 0.42));
+    const dk = clamp01((T - 0.2 - 4 * beat) / 0.55);
+    intro[4] = dk <= 0 ? 0 : dk < 0.6 ? Math.pow(dk / 0.6, 2) : 1 - Math.sin((dk - 0.6) / 0.4 * Math.PI) * 0.06;  // drop, one small bounce
+    const prev = cur;
+    cur += (target - cur) * Math.min(1, dt * 6);
+    compose(cur, T, intro);
+    drawGrid(dt, T, (cur - prev) / Math.max(dt, 0.001) * 0.05);
+    if (T > 3.2 && !scrolled && !$('hint').dataset.done) { $('hint').dataset.done = 1; $('hint').classList.add('on'); }
+    requestAnimationFrame(loop);
+  }
+  addEventListener('scroll', () => { readScroll(); if (!scrolled && scrollY > 10) { scrolled = true; $('hint').classList.remove('on'); } if (reduce) { cur = target; compose(cur, 0, [1, 1, 1, 1, 1]); } }, { passive: true });
+  $('art').addEventListener('pointerdown', e => {           // tap the dot: it hops
+    const d = $('dot'), cx = +d.getAttribute('cx'), cy = +d.getAttribute('cy'), r = +d.getAttribute('r');
+    if (!reduce && Math.hypot(e.clientX - cx, e.clientY - cy) < r + 24) d.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-U * 0.12}px)`, easing: 'cubic-bezier(.2,.7,.3,1)' }, { transform: 'translateY(0)', easing: 'cubic-bezier(.6,0,.9,.4)' }], { duration: 520 });
+  });
+  addEventListener('keydown', e => {
+    const step = innerHeight * 1.0;
+    if (e.key === 'ArrowDown' || e.key === 'PageDown') { scrollBy({ top: step, behavior: reduce ? 'auto' : 'smooth' }); e.preventDefault(); }
+    if (e.key === 'ArrowUp' || e.key === 'PageUp') { scrollBy({ top: -step, behavior: reduce ? 'auto' : 'smooth' }); e.preventDefault(); }
+  });
+  addEventListener('resize', () => { layout(); readScroll(); if (reduce) { cur = target; compose(cur, 0, [1, 1, 1, 1, 1]); drawGrid(0, 0, 0); } });
+  layout(); readScroll(); cur = target;
+  if (reduce) { compose(cur, 0, [1, 1, 1, 1, 1]); drawGrid(0, 0, 0); $('hint').classList.add('on'); }
+  else requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020a14">
+<title>冰晶 · Frost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet">
+<style>
+  :root { --night: #020a14; --frost: 214 240 255; }
+  html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+  #gl.drag { cursor: grabbing; }
+  #gl:focus-visible { box-shadow: inset 0 0 0 2px rgba(190, 230, 255, .45); }
+  .sign, .hint { position: fixed; left: 0; right: 0; margin: 0; text-align: center; pointer-events: none; }
+  .sign {
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 2.4vh);
+    font-family: 'Italiana', 'Didot', 'Bodoni 72', Georgia, serif; font-size: clamp(19px, 2vw, 28px); letter-spacing: .32em; text-indent: .32em;
+    background: linear-gradient(100deg, #8fd0ff 0%, #effaff 35%, #ffffff 50%, #cfe6ff 65%, #8fd0ff 100%); background-size: 250% 100%; background-position: 100% 0;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    opacity: 0; transform: translateY(8px); filter: blur(3px);
+    transition: opacity 2s cubic-bezier(.2,.7,.2,1), transform 2s cubic-bezier(.2,.7,.2,1), filter 2s;
+  }
+  .ready .sign { opacity: 1; transform: none; filter: none; animation: sheen 6.5s ease-in-out 1s infinite; }
+  @keyframes sheen { 0% { background-position: 100% 0; } 55%, 100% { background-position: 0% 0; } }
+  .hint {
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 2.4vh + clamp(36px, 3.6vw, 48px));
+    font: 13px/1.5 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; letter-spacing: .14em; color: rgb(var(--frost) / .7); text-shadow: 0 0 10px rgba(2, 10, 20, .95), 0 0 2px rgba(2, 10, 20, .9);
+    opacity: 0; transition: opacity 1.2s ease;
+  }
+  .hint.on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .sign, .ready .sign { transition: none; opacity: 1; transform: none; filter: none; animation: none; background-position: 50% 0; }
+    .hint { transition: none; }
+  }
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-01.html" aria-label="上一棵">‹</a><span>02/10</span><a class="arr" href="tree-03.html" aria-label="下一棵">›</a></nav>
+<canvas id="gl" tabindex="0" role="img" aria-label="一圈冰晶旋风贴着冰湖向上盘旋，边转边把一棵冰树织出来；彗星拖着长尾绕树爬升，撞上树顶的雪花迸成焰火，光像脉搏一样从树根流向枝梢。划过树会搅起漩涡，点击整棵树炸开再飞回，双击召来彗星雨与暴风雪"></canvas>
+<p class="hint" id="hint"></p>
+<p class="sign">Merry Christmas</p>
+<script>
+(() => {
+  'use strict';
+  let cv = document.getElementById('gl');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  const hint = document.getElementById('hint');
+  hint.textContent = touchOnly ? '手指划过搅起漩涡，轻触炸开再飞回，双击召来彗星雨' : '划过树搅起漩涡，点击炸开再飞回，双击召来彗星雨，拖动旋转';
+  const TAU = Math.PI * 2, D = 3.0, TILT = 0.22, cT = Math.cos(TILT), sT = Math.sin(TILT);
+  const rnd = Math.random, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const FY = -0.55, TH = 0.98, STY = FY + TH + 0.075;
+  // choreography (seconds)
+  const SAP0 = 3.4, SAPP = 3.2, SAPV = 0.5;                 // heartbeat of light from the roots
+  const NC = 3, NSC = touchOnly ? 3 : 4, C_T0 = 3.1, C_DT = 1.5, C_SP = 0.22, CS_SP = 0.36, CS_DT = 0.4, TAILU = 0.085;
+
+  // ======================= GL context and HDR targets =======================
+  const attrs = { antialias: false, alpha: false, depth: false, premultipliedAlpha: false, powerPreference: 'high-performance' };
+  let gl = null, gl2 = false;
+  try { gl = cv.getContext('webgl2', attrs); gl2 = !!gl; if (!gl) gl = cv.getContext('webgl', attrs); } catch (e) { gl = null; }
+  if (!gl) { staticFallback(); return; }
+  let FMT = null;
+  if (gl2 && gl.getExtension('EXT_color_buffer_float')) FMT = { i: gl.RGBA16F, f: gl.RGBA, t: gl.HALF_FLOAT, k: 1 };
+  else if (!gl2) { const hf = gl.getExtension('OES_texture_half_float'), cb = gl.getExtension('EXT_color_buffer_half_float'); if (hf && cb && gl.getExtension('OES_texture_half_float_linear')) FMT = { i: gl.RGBA, f: gl.RGBA, t: hf.HALF_FLOAT_OES, k: 1 }; }
+  const LDR = { i: gl.RGBA, f: gl.RGBA, t: gl.UNSIGNED_BYTE, k: 0.25 };
+  cv.addEventListener('webglcontextlost', e => e.preventDefault()); cv.addEventListener('webglcontextrestored', () => location.reload());
+  function makeRT(w, h, fmt) {
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, fmt.i, w, h, 0, fmt.f, fmt.t, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return ok ? { tex, fb, w, h } : null;
+  }
+  { const probe = FMT && makeRT(4, 4, FMT); if (!probe) FMT = LDR; }
+
+  // ======================= shaders =======================
+  function sh(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function prog(vs, fs, names, attr0) {
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(p, 0, attr0 || 'p'); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}; for (const n of names) u[n] = gl.getUniformLocation(p, n); return { p, u };
+  }
+  const VS_Q = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+  const HDR = 'precision highp float; varying vec2 vUv;';
+  // Every particle is a pure function of time: the GPU places it, the CPU only sends a handful of uniforms.
+  // The same shader runs twice: as sprites (crisp heads) and as line segments from last frame's
+  // position to this frame's, which a feedback buffer turns into continuous light trails.
+  const VS_P = `precision highp float;
+attribute vec3 aHome, aDir, aCol; attribute vec4 aP1, aP2; attribute float aEnd;
+uniform vec2 uRes; uniform float uPx, uS, uCX, uCY, uMirror, uFloor, uFade, uUnit, uLine, uStormAt;
+uniform vec4 uF0, uF1, uG0, uG1, uB0, uB1, uV0, uV1; uniform vec2 uK0, uK1;
+uniform vec4 uPulse[8]; uniform vec3 uPulseO[8];
+varying vec4 vCol; varying float vMode;
+const float D = 3.0, CT = ${cT.toFixed(6)}, ST = ${sT.toFixed(6)}, FY = ${FY.toFixed(3)}, TH = ${TH.toFixed(3)}, STY = ${STY.toFixed(4)};
+const float SAP0 = ${SAP0.toFixed(2)}, SAPP = ${SAPP.toFixed(2)}, SAPV = ${SAPV.toFixed(2)};
+const float NC = ${NC.toFixed(1)}, C_T0 = ${C_T0.toFixed(2)}, C_DT = ${C_DT.toFixed(2)}, C_SP = ${C_SP.toFixed(3)}, CS_SP = ${CS_SP.toFixed(3)}, CS_DT = ${CS_DT.toFixed(2)}, TAILU = ${TAILU.toFixed(3)};
+float hash(float n){ return fract(sin(n) * 43758.5453); }
+float flightOf(float ph){ return 0.95 + hash(ph * 11.3) * 0.45; }
+float sapS(float t, float jit, float v){ float w = t - SAP0; if (w < 0.0) return -1.0; return (mod(w, SAPP) - jit) * v; }
+void hide(){ gl_Position = vec4(2.0, 2.0, 0.0, 1.0); gl_PointSize = 0.0; vCol = vec4(0.0); vMode = 0.0; }
+void main(){
+  bool line = uLine > 0.5;
+  vec4 F = mix(uF0, uF1, aEnd), G = mix(uG0, uG1, aEnd), BU = mix(uB0, uB1, aEnd), VO = mix(uV0, uV1, aEnd);
+  vec2 K = mix(uK0, uK1, aEnd);
+  float time = F.x, IT = F.y, rot = F.z, wave = F.w;
+  float type = aP2.x, ph = aP2.y, twf = aP2.z, ex = aP2.w;
+  float size = aP1.x, alpha = aP1.y, path = aP1.z, birth = aP1.w;
+  vec3 p = aHome, c = aCol;
+  float a = alpha, mode = 0.0, glow = 0.0, flash = 1.0, spin = 1.0, gain = 0.5, lk = 0.9;
+  bool tree = type < 7.5, burstable = tree, dof = true;
+  if (tree) {
+    if (type > 4.5 && type < 5.5) {                         // the crown snowflake grows from its centre
+      float age = IT - birth;
+      if (age < 0.0) { hide(); return; }
+      float k = clamp(age / 0.5, 0.0, 1.0);
+      p = vec3(0.0, STY, 0.0) + (aHome - vec3(0.0, STY, 0.0)) * (1.0 - pow(1.0 - k, 3.0));
+      flash = 1.0 + 2.0 * (1.0 - k) + G.w * 0.9; spin = 0.0; gain = 1.1; burstable = false;
+    } else {                                                  // a whirlwind collar climbs the tree and weaves it, bottom to top
+      float fl = flightOf(ph);
+      if (line) { float k0 = (uF0.y - birth + fl) / fl, k1 = (uF1.y - birth + fl) / fl; if (k0 <= 0.0 || k1 <= 0.0) { hide(); return; } }
+      float k = clamp((IT - birth + fl) / fl, 0.0, 1.0);
+      if (k <= 0.0) { hide(); return; }
+      if (k < 1.0) {
+        float e = k * k * (3.0 - 2.0 * k);
+        float rh = length(aHome.xz), ah = atan(aHome.z, aHome.x);
+        float ang = ah - (1.0 - e) * (0.6 + hash(ph * 5.7) * 0.55) * 6.2831853;
+        float r = mix(rh + 0.1 + hash(ph * 3.1) * 0.2, rh, e);
+        float y0 = max(aHome.y - 0.15 - hash(ph * 7.9) * 0.17, FY + 0.012 + hash(ph * 2.3) * 0.05);
+        p = vec3(cos(ang) * r, mix(y0, aHome.y, e), sin(ang) * r);
+        a *= smoothstep(0.0, 0.22, k) * mix(0.8, 1.0, e);
+        size *= mix(0.7, 1.0, e);
+        c = mix(vec3(0.8, 0.93, 1.0), c, e);
+      } else flash = 1.0 + 1.8 * exp(-(IT - birth) * 6.0);    // each crystal flashes as it freezes in place
+      if (type > 2.5 && type < 3.5) gain = 0.3;
+      if (type > 3.5 && type < 4.5) { gain = 0.85; lk = 0.0; }
+    }
+    if (wave >= 0.0) { float wy = FY - 0.06 + wave * 0.95, wv = exp(-pow((aHome.y - wy) / 0.035, 2.0)) * smoothstep(0.0, 0.25, wave); glow += wv * 0.6; c = mix(c, vec3(0.45, 0.9, 1.0), wv * 0.7); p.xz *= 1.0 + wv * 0.045; }
+    float sw = time - SAP0;                                   // the heartbeat lights the veins as it passes
+    if (sw > 0.0) { float sf = mod(sw, SAPP) * SAPV - 0.08; glow += exp(-pow((path - sf) / 0.045, 2.0)) * 0.24; }
+    for (int q = 0; q < 8; q++) {
+      vec4 P = uPulse[q];
+      if (P.z <= 0.0) continue;
+      float pa = time - P.y, dd = abs(path - P.x) - pa * 0.95;
+      if (abs(dd) > 0.12) continue;
+      float w = exp(-dd * dd * 420.0) * max(0.0, 1.0 - pa / 2.6) * P.z;
+      if (P.w > 0.5) w *= exp(-length(aHome - uPulseO[q]) * 2.6);
+      glow += w;
+    }
+  } else if (type < 8.5) {                                    // glitter on the frozen lake
+    a *= smoothstep(0.0, 1.6, IT); gain = 0.3; burstable = false;
+  } else if (type < 10.5) {                                   // fireworks thrown from the crown when a comet arrives
+    float g = aHome.x, tb = g < 0.5 ? K.x : K.y;
+    if (line) {
+      float b0 = g < 0.5 ? uK0.x : uK0.y, b1 = g < 0.5 ? uK1.x : uK1.y, t0 = uF0.x - b0, t1 = uF1.x - b1;
+      if (abs(b0 - b1) > 0.001 || t0 < 0.0 || t1 < 0.0 || t0 > 1.7 || t1 > 1.7) { hide(); return; }
+    }
+    float tau = time - tb;
+    if (tau < 0.0 || tau > 1.7) { hide(); return; }
+    float v0 = 0.4 + ex * 0.75;
+    p = vec3(0.0, STY, 0.0) + aDir * v0 * (1.0 - exp(-2.6 * tau)) / 2.6 + vec3(0.0, -0.2 * tau * tau, 0.0);
+    a *= pow(1.0 - tau / 1.7, 1.5); spin = 0.0; gain = 0.8; lk = 1.0; burstable = false;
+    c = mix(vec3(1.0), c, smoothstep(0.0, 0.45, tau));
+  } else if (type < 13.5) {                                   // snow; a storm whirls it round the tree
+    float y0 = FY - 0.05, fall = 0.05 + hash(ph) * 0.07;
+    if (line) { float ya = mod(aHome.y - y0 - uG0.x * fall, 2.0), yb = mod(aHome.y - y0 - uG1.x * fall, 2.0); if (abs(ya - yb) > 0.5) { hide(); return; } }
+    float y = mod(aHome.y - y0 - G.x * fall, 2.0) + y0;
+    float rr = length(aHome.xz) * (1.0 - G.z * 0.35);
+    float an = atan(aHome.z, aHome.x) + G.x * 0.05 + G.y / (rr + 0.25);
+    p = vec3(cos(an) * rr, y, sin(an) * rr);
+    mode = 3.0 + fract(ph + time * (hash(ph * 5.0) - 0.5) * 0.3) * 0.999;
+    a *= smoothstep(0.0, 1.2, IT) * (1.0 + G.z * 0.6); spin = 0.0; gain = 0.3; lk = 0.9 * G.z; burstable = false;
+  } else if (type < 14.5) {                                   // a few glints circling the crown
+    float an = ph * 6.2831853 + time * (0.15 + hash(ph) * 0.2);
+    p = vec3(cos(an) * aHome.x, aHome.y + sin(time * 0.4 + ph * 9.0) * 0.03, sin(an) * aHome.x);
+    float tw = pow(max(0.0, sin(time * (1.0 + hash(ph * 2.0) * 2.0) + ph * 20.0)), 6.0);
+    a *= tw * smoothstep(3.0, 4.5, IT); mode = 2.0; size *= 1.0 + tw; spin = 0.0; gain = 0.7; burstable = false;
+  } else if (type < 15.5) {                                   // sap: a pulse of light up the trunk and out to every limb tip
+    float phi = aHome.x, Lb = aHome.y, e0 = aHome.z, sk = aDir.x;
+    float tl = sk * TH, total = tl + Lb, v = SAPV * (0.92 + hash(ph) * 0.2), jit = ex * 0.3;
+    if (line) { float s0 = sapS(uF0.x, jit, v), s1 = sapS(uF1.x, jit, v); if (s0 < 0.0 || s1 < 0.0 || s0 > total || s1 > total || s0 < s1) { hide(); return; } }
+    float s = sapS(time, jit, v);
+    if (s < 0.0 || s > total) { hide(); return; }
+    if (s < tl) { float h = s / TH; p = vec3(0.016 * sin(3.1 * h) + cos(ph * 40.0) * 0.008, FY + s, 0.012 * cos(2.4 * h + 1.0) + sin(ph * 40.0) * 0.008); a *= 0.45; lk = 0.35; }
+    else { float u = (s - tl) / Lb; p = vec3(0.016 * sin(3.1 * sk) + cos(phi) * u * Lb, FY + tl + Lb * (e0 * u - 0.27 * u * u), 0.012 * cos(2.4 * sk + 1.0) + sin(phi) * u * Lb); a *= 1.0 - smoothstep(0.8, 1.0, u); }
+    a *= smoothstep(0.0, 0.05, s); gain = 0.85; lk *= 0.9 / 0.55;
+  } else {                                                    // comets: long tails spiralling up to the crown
+    float ci = aDir.x, kk = aDir.y;
+    bool storm = ci > NC - 0.5, dust = kk > 1.5;
+    float t0 = storm ? uStormAt + (ci - NC) * CS_DT : C_T0 + ci * C_DT, csp = storm ? CS_SP : C_SP;
+    float uh = (time - t0) * csp, u = uh - kk * TAILU, age = 0.0;
+    if (dust) { age = fract(time / 1.3 + hash(ph * 13.0)); u = (time - age * 1.3 - t0) * csp; kk = 0.5; }
+    if (uh < 0.0 || u < 0.0 || (!dust && floor(u) != floor(uh))) { hide(); return; }
+    float uc = fract(u);
+    float rr = 0.74 * (1.0 - uc) + 0.03 * sin(uc * 3.14159);
+    float an = uc * 3.2 * 6.2831853 + ci * 2.1;
+    p = vec3(cos(an) * rr, FY + 0.03 + uc * (STY - FY - 0.03), sin(an) * rr);
+    a *= smoothstep(0.0, 0.03, uc) * (1.0 - smoothstep(0.94, 1.0, uc)) * (storm ? G.z : 1.0);
+    if (dust) {                                               // glitter left hanging in the comet's wake
+      p += aHome * age * 0.07 + vec3(0.0, -0.05 * age * age, 0.0);
+      a *= pow(1.0 - age, 1.6) * smoothstep(0.0, 0.06, age) * (0.4 + 0.6 * pow(abs(sin(time * twf + ph * 30.0)), 4.0));
+      gain = 1.0; if (hash(ph * 7.0) > 0.7) mode = 2.0;
+    } else {
+      a *= pow(1.0 - kk, 1.5);
+      size *= mix(1.0, 0.3, kk);
+      c = mix(c, vec3(1.0), pow(1.0 - kk, 8.0));
+      if (kk < 0.001) { mode = 2.0; gain = 1.6; } else gain = 0.85;
+      dof = false;
+    }
+    burstable = false;
+  }
+  // rotate with the tree, tilt, project
+  float cr = cos(rot * spin), sr = sin(rot * spin);
+  vec3 q = vec3(p.x * cr - p.z * sr, p.y, p.x * sr + p.z * cr);
+  float y2 = q.y * CT - q.z * ST, z2 = q.y * ST + q.z * CT;
+  float kp = D / (D + z2);
+  vec2 sp = vec2(uCX + q.x * kp * uS, uCY - y2 * kp * uS);
+  // the pointer stirs a whirlpool into whatever it passes
+  vec2 dv = sp - VO.xy; float th = VO.z * exp(-dot(dv, dv) / (VO.w * VO.w)); float cs = cos(th), sn = sin(th);
+  flash *= 1.0 + min(abs(th), 2.0) * 0.4;
+  sp = VO.xy + vec2(cs * dv.x - sn * dv.y, sn * dv.x + cs * dv.y);
+  // a tap blows the tree apart; every crystal flies out and comes home
+  if (burstable && BU.z < 3.2) {
+    vec2 bv = sp - BU.xy; float bd = length(bv) + 0.001, R = BU.w;
+    vec2 dir = normalize(bv / bd + (vec2(hash(ph * 17.0), hash(ph * 29.0)) - 0.5) * 0.9);
+    float t = BU.z, env = (1.0 - exp(-t * 10.0)) * exp(-t * 1.5);
+    sp += dir * R * (0.3 + hash(ph * 31.0) * 0.9) * exp(-bd / (R * 1.2)) * env;
+  }
+  float blur = dof ? clamp((z2 + 0.08) * 2.4, 0.0, 1.0) : 0.0;
+  float tw = 0.65 + 0.35 * sin(time * twf + ph * 6.2831853);
+  if (type > 3.5 && type < 4.5) glow *= 0.3;
+  a *= tw * flash * (1.0 + glow * 2.0) / (1.0 + blur * 1.1) * gain;
+  c = mix(c, vec3(1.0), min(1.0, glow * 0.6));
+  vec2 clip;
+  if (line) {
+    clip = sp / uRes * 2.0 - 1.0; clip.y = -clip.y;
+    gl_Position = vec4(clip, 0.0, 1.0); gl_PointSize = 1.0;
+    vCol = vec4(c, a * lk * (1.0 - aEnd * 0.4)); vMode = 0.0;
+    return;
+  }
+  float s = size * kp * uUnit * 5.4 * (1.0 + blur * 1.5) * (1.0 + glow * 0.4);
+  if (type > 3.5 && type < 4.5) { a *= 0.6 + 0.4 * pow(sin(time * 1.4 + ph * 6.28), 2.0); s *= 0.85; if (blur < 0.28) { mode = 2.0; s *= 1.9; } }
+  if (mode < 1.5) mode = blur;
+  if (uMirror > 0.5) { float dy = uFloor - sp.y; sp.y = uFloor + dy * 0.8; a *= 0.34 * exp(-max(dy, 0.0) / uFade); if (dy < -3.0) a = 0.0; }
+  clip = sp / uRes * 2.0 - 1.0; clip.y = -clip.y;
+  gl_Position = vec4(clip, 0.0, 1.0);
+  gl_PointSize = clamp(s * uPx, 1.0, 140.0);
+  vCol = vec4(c, a); vMode = mode;
+}`;
+  const FS_P = `precision mediump float;
+uniform float uOut; varying vec4 vCol; varying float vMode;
+mat2 rot(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+void main(){
+  vec2 p = gl_PointCoord * 2.0 - 1.0; float d = dot(p, p);
+  if (d > 1.0 || vCol.a <= 0.002) discard;
+  vec3 col; float a;
+  if (vMode >= 2.99) {
+    vec2 q = rot((vMode - 3.0) * 6.2831853) * p;
+    float r = length(q), an = atan(q.y, q.x), af = abs(mod(an + 0.5236, 1.0472) - 0.5236);
+    float arm = smoothstep(0.11, 0.03, r * sin(af)) * smoothstep(1.0, 0.8, r);
+    vec2 sp = vec2(r * cos(af), r * sin(af));
+    float twig = smoothstep(0.08, 0.02, abs(sp.y - (sp.x - 0.55) * 0.9)) * step(0.55, sp.x) * smoothstep(0.85, 0.7, sp.x);
+    a = clamp(arm + twig * 0.8 + exp(-r * r * 30.0), 0.0, 1.0) * vCol.a; col = mix(vCol.rgb, vec3(1.0), 0.4);
+  }
+  else if (vMode > 1.5) { float ax = abs(p.x), ay = abs(p.y); float cr = exp(-ax * 24.0) * exp(-ay * 2.6) + exp(-ay * 24.0) * exp(-ax * 2.6); float core = exp(-d * 16.0); a = (cr * 1.1 + core) * vCol.a * (1.0 - d); col = mix(vCol.rgb, vec3(1.0), core * 0.5); }
+  else { float core = exp(-d * mix(26.0, 3.0, vMode)), halo = exp(-d * 4.5) * mix(0.4, 0.05, vMode); a = (core + halo) * vCol.a * (1.0 - d); col = mix(vCol.rgb, vec3(1.0), core * 0.4 * (1.0 - vMode)); }
+  gl_FragColor = vec4(col * a * uOut, 1.0);
+}`;
+  const FS_L = `precision mediump float; uniform float uOut; varying vec4 vCol; varying float vMode;
+void main(){ if (vCol.a <= 0.002) discard; gl_FragColor = vec4(vCol.rgb * vCol.a * uOut, 1.0); }`;
+  // light trails: keep the brighter of this frame and a fading memory of the last ones
+  const FS_TRAIL = `${HDR} uniform sampler2D uNew, uOld; uniform float uDecay;
+void main(){ vec3 n = texture2D(uNew, vUv).rgb, o = texture2D(uOld, vUv).rgb; gl_FragColor = vec4(max(n, max(o * uDecay - 0.0015, 0.0)), 1.0); }`;
+  const FS_DOWN = `${HDR} uniform sampler2D uTex, uTex2; uniform vec2 uTexel; uniform float uFirst, uThresh;
+vec3 S(vec2 uv){ vec3 c = texture2D(uTex, uv).rgb; if (uFirst > 0.5) { c += texture2D(uTex2, uv).rgb; float br = max(c.r, max(c.g, c.b)); float soft = clamp(br - uThresh + 0.35, 0.0, 0.7); soft = soft * soft / 1.4; c *= max(soft, br - uThresh) / max(br, 1e-4); } return c; }
+void main(){ vec2 o = uTexel * 0.5; vec3 s = S(vUv) * 4.0 + S(vUv - o) + S(vUv + o) + S(vUv + vec2(o.x, -o.y)) + S(vUv - vec2(o.x, -o.y)); gl_FragColor = vec4(s / 8.0, 1.0); }`;
+  const FS_UP = `${HDR} uniform sampler2D uTex, uAdd; uniform vec2 uTexel;
+void main(){ vec2 o = uTexel * 0.5;
+  vec3 s = texture2D(uTex, vUv + vec2(-o.x * 2.0, 0.0)).rgb + texture2D(uTex, vUv + vec2(-o.x, o.y)).rgb * 2.0 + texture2D(uTex, vUv + vec2(0.0, o.y * 2.0)).rgb + texture2D(uTex, vUv + vec2(o.x, o.y)).rgb * 2.0
+         + texture2D(uTex, vUv + vec2(o.x * 2.0, 0.0)).rgb + texture2D(uTex, vUv + vec2(o.x, -o.y)).rgb * 2.0 + texture2D(uTex, vUv + vec2(0.0, -o.y * 2.0)).rgb + texture2D(uTex, vUv + vec2(-o.x, -o.y)).rgb * 2.0;
+  gl_FragColor = vec4(s / 12.0 + texture2D(uAdd, vUv).rgb, 1.0); }`;
+  const FS_RAYS = `${HDR} uniform sampler2D uTex; uniform vec2 uLight; uniform float uDecay, uWeight, uAspect;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+void main(){
+  vec2 to = vUv - uLight; float len = length(to * vec2(uAspect, 1.0));
+  vec2 delta = to * (0.92 / 32.0);
+  vec2 uv = vUv - delta * h21(gl_FragCoord.xy); vec3 c = vec3(0.0); float il = 1.0;
+  for (int i = 0; i < 32; i++) { uv -= delta; vec2 dd = (uv - uLight) * vec2(uAspect, 1.0); c += texture2D(uTex, uv).rgb * il * exp(-dot(dd, dd) * 90.0); il *= uDecay; }
+  c *= exp(-len * len * 9.0);
+  gl_FragColor = vec4(c * uWeight, 1.0); }`;
+  const FS_COMP = `${HDR} uniform sampler2D uScene, uTrail, uBloom, uRays; uniform float uInv, uBloomK, uRaysK, uT, uS, uFloor, uGlow, uRip; uniform vec2 uRes, uC, uCss;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+void main(){
+  vec2 fc = vec2(vUv.x, 1.0 - vUv.y) * uCss;
+  float m = max(uCss.x, uCss.y), d = length((fc - uC + vec2(0.0, uS * 0.1)) / m);
+  vec3 bg = mix(vec3(0.006, 0.02, 0.045), vec3(0.0015, 0.005, 0.012), smoothstep(0.0, 0.85, d));
+  vec2 mh = (fc - vec2(uC.x, uC.y - uS * 0.12)) / (uS * 0.7);
+  bg += vec3(0.02, 0.065, 0.12) * exp(-dot(mh, mh) * 1.3) * uGlow;
+  bg *= mix(1.0, 0.55, smoothstep(uFloor - 2.0, uFloor + 6.0, fc.y));
+  vec2 cell = floor(fc / 6.0), f = fract(fc / 6.0); float r = h21(cell);
+  if (r > 0.988 && fc.y < uFloor) { vec2 sp = vec2(h21(cell + 7.1), h21(cell + 3.7)) * 0.6 + 0.2; float b = (r - 0.988) / 0.012; bg += vec3(0.6, 0.75, 1.0) * smoothstep(0.32, 0.0, length(f - sp)) * (0.02 + 0.12 * b * b) * (0.6 + 0.4 * sin(uT * (1.0 + b * 3.0) + r * 60.0)); }
+  float fr = length(vec2((fc.x - uC.x) / uS, (fc.y - uFloor) / (uS * 0.24)));
+  for (int i = 0; i < 2; i++) { float rt = uRip - float(i) * 0.4; if (rt > 0.0 && rt < 2.6) { float R = 0.04 + rt * 0.62, k = exp(-rt * 1.5) * (1.0 - float(i) * 0.45);
+    bg += vec3(0.5, 0.85, 1.0) * (exp(-pow((fr - R) / 0.012, 2.0)) * 0.9 + exp(-pow((fr - R) / 0.09, 2.0)) * 0.16) * k * smoothstep(-6.0, 1.0, fc.y - uFloor) * (1.0 - smoothstep(uFloor + 2.0, uFloor + uS * 0.6, fc.y) * 0.6); } }
+  vec3 col = bg + (texture2D(uScene, vUv).rgb + texture2D(uTrail, vUv).rgb + texture2D(uBloom, vUv).rgb * uBloomK + texture2D(uRays, vUv).rgb * uRaysK) * uInv;
+  col = aces(col);
+  vec2 v = vUv - 0.5; col *= 1.0 - dot(v, v) * 0.5;
+  col = pow(col, vec3(0.4545)) + (h21(vUv * uRes + uT) - 0.5) / 200.0;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  const PT_U = ['uRes', 'uPx', 'uS', 'uCX', 'uCY', 'uMirror', 'uFloor', 'uFade', 'uUnit', 'uLine', 'uStormAt', 'uF0', 'uF1', 'uG0', 'uG1', 'uB0', 'uB1', 'uV0', 'uV1', 'uK0', 'uK1', 'uPulse', 'uPulseO', 'uOut'];
+  let P = {};
+  try {
+    P.pt = prog(VS_P, FS_P, PT_U, 'aHome');
+    P.ln = prog(VS_P, FS_L, PT_U, 'aHome');
+    P.trail = prog(VS_Q, FS_TRAIL, ['uNew', 'uOld', 'uDecay']);
+    P.down = prog(VS_Q, FS_DOWN, ['uTex', 'uTex2', 'uTexel', 'uFirst', 'uThresh']);
+    P.up = prog(VS_Q, FS_UP, ['uTex', 'uAdd', 'uTexel']);
+    P.rays = prog(VS_Q, FS_RAYS, ['uTex', 'uLight', 'uDecay', 'uWeight', 'uAspect']);
+    P.comp = prog(VS_Q, FS_COMP, ['uScene', 'uTrail', 'uBloom', 'uRays', 'uInv', 'uBloomK', 'uRaysK', 'uT', 'uS', 'uFloor', 'uGlow', 'uRip', 'uRes', 'uC', 'uCss']);
+  } catch (e) { console.warn('Frost renderer unavailable, showing a still image', e); staticFallback(); return; }
+  const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+
+  // ======================= particles (built once; the GPU animates them) =======================
+  const area = innerWidth * innerHeight;
+  const Q = Math.min(1, Math.max(touchOnly ? 0.36 : 0.5, area / (1440 * 900)));
+  const PAL = { white: [.95, .98, 1], frost: [.55, .82, 1], cyan: [.3, .85, 1], violet: [.66, .55, 1], silver: [.82, .9, 1], gold: [1, .82, .5], pink: [1, .62, .9] };
+  const data = [], ldata = []; let count = 0, lverts = 0;
+  const pick = [], limbs = [];
+  function put(x, y, z, dx, dy, dz, c, size, alpha, path, birth, type, ph, twf, ex, line) {
+    const v = [x, y, z, dx, dy, dz, c[0], c[1], c[2], size, alpha, path, birth, type, ph, twf, ex];
+    for (let i = 0; i < 17; i++) data.push(v[i]);
+    count++;
+    if (line) { for (let i = 0; i < 17; i++) ldata.push(v[i]); ldata.push(0); for (let i = 0; i < 17; i++) ldata.push(v[i]); ldata.push(1); lverts += 2; }
+    if (type < 7.5 && type !== 5 && count % 3 === 0) pick.push([x, y, z, path]);
+  }
+  const TL = () => rnd() < 0.13;                                   // which crystals draw light trails while they move
+  const land = path => 0.8 + path * 1.45 + rnd() * 0.25;            // when each crystal freezes into place (bottom first)
+  const trunkC = s => [0.016 * Math.sin(s * 3.1), 0.012 * Math.cos(s * 2.4 + 1.0)];
+  const trunkR = s => 0.055 * Math.pow(1 - s, 0.75) + 0.006;
+  for (let i = 0, n = Math.round(2000 * Q); i < n; i++) {
+    const s = Math.pow(rnd(), 0.85), [cx, cz] = trunkC(s), a = Math.floor(rnd() * 14) / 14 * TAU + (rnd() - 0.5) * 0.16, rr = trunkR(s) * (0.7 + 0.3 * rnd());
+    put(cx + Math.cos(a) * rr, FY + s * TH, cz + Math.sin(a) * rr, 0, 0, 0, rnd() < 0.5 ? PAL.silver : PAL.frost, 0.75 + rnd() * 0.8, 0.8, s * TH, land(s * TH), 0, rnd(), 0.6 + rnd() * 2.4, 0, TL());
+  }
+  for (let r = 0; r < 7; r++) {
+    const phi = r / 7 * TAU + rnd() * 0.4, L = 0.14 + rnd() * 0.12;
+    for (let i = 0, n = Math.round(90 * Q); i < n; i++) { const u = rnd(), w = 0.012 * (1 - u); put(Math.cos(phi + u * 0.3) * (0.045 + u * L) + (rnd() - 0.5) * w, FY + 0.012 * (1 - u), Math.sin(phi + u * 0.3) * (0.045 + u * L) + (rnd() - 0.5) * w, 0, 0, 0, PAL.frost, 0.6 + (1 - u) * 0.7, 0.75, u * L * 0.6, land(0), 6, rnd(), 1 + rnd() * 2, 0, TL()); }
+  }
+  const tips = [];
+  for (let k = 0; k < 11; k++) {
+    const sk = 0.15 + k * 0.075, yk = FY + sk * TH, [cx0, cz0] = trunkC(sk), nb = Math.max(4, Math.round(8 - k * 0.35));
+    for (let j = 0; j < nb; j++) {
+      const phi = k * 2.39996 + j * TAU / nb + (rnd() - 0.5) * 0.3, L = (0.6 * Math.pow(1 - sk, 0.95) + 0.06) * (0.85 + rnd() * 0.3), e0 = 0.1 + rnd() * 0.08;
+      const cp = Math.cos(phi), sp = Math.sin(phi), base = sk * TH;
+      limbs.push([phi, L, e0, sk]);
+      const B = u => [cx0 + cp * u * L, yk + L * (e0 * u - 0.27 * u * u), cz0 + sp * u * L];
+      for (let i = 0, n = Math.round(150 * L * Q) + 6; i < n; i++) { const u = Math.pow(rnd(), 0.9), p = B(u), w = 0.007 * (1 - u * 0.7); put(p[0] + (rnd() - 0.5) * w, p[1] + (rnd() - 0.5) * w, p[2] + (rnd() - 0.5) * w, 0, 0, 0, rnd() < 0.5 ? PAL.white : PAL.silver, (0.75 + rnd() * 0.6) * (1.45 - 0.6 * u), 0.9, base + u * L, land(base + u * L), 1, rnd(), 0.6 + rnd() * 2.4, 0, TL()); }
+      for (const mm of [0.28, 0.46, 0.64, 0.82]) for (const side of [-1, 1]) {
+        if (rnd() < 0.12) continue;
+        const phi2 = phi + side * (0.7 + rnd() * 0.35), L2 = L * (0.42 - mm * 0.24), b = B(mm), c2 = Math.cos(phi2), s2 = Math.sin(phi2);
+        const T2 = v => [b[0] + c2 * v * L2, b[1] + L2 * (0.14 * v - 0.32 * v * v), b[2] + s2 * v * L2];
+        for (let i = 0, n = Math.round(100 * L2 * Q) + 3; i < n; i++) { const v = rnd(), p = T2(v); put(p[0], p[1], p[2], 0, 0, 0, rnd() < 0.5 ? PAL.frost : PAL.white, 0.65 + rnd() * 0.5, 0.8, base + mm * L + v * L2, land(base + mm * L + v * L2), 2, rnd(), 0.6 + rnd() * 2.4, 0, TL()); }
+        for (let i = 0, n = Math.round(45 * L2 * Q) + 1; i < n; i++) { const v = rnd(), p = T2(v), rr = 0.026 * (1 - v * 0.5) * Math.sqrt(rnd()), a = rnd() * TAU; put(p[0] + Math.cos(a) * rr, p[1] + Math.sin(a) * rr * 0.6 - rr * 0.4, p[2] + Math.sin(a + 1) * rr, 0, 0, 0, [PAL.cyan, PAL.white, PAL.violet, PAL.frost][i % 4], 0.45 + rnd() * 0.5, 0.55, base + mm * L + v * L2, land(base + mm * L + v * L2), 3, rnd(), 0.8 + rnd() * 3, 0, false); }
+        if (rnd() < 0.4) tips.push([...T2(1), base + mm * L + L2]);
+      }
+      for (let i = 0, n = Math.round(70 * L * Q); i < n; i++) { const u = rnd(), p = B(u), rr = 0.03 * (1 - u * 0.5) * Math.sqrt(rnd()), a = rnd() * TAU; put(p[0] + Math.cos(a) * rr, p[1] + Math.sin(a) * rr * 0.6 - rr * 0.35, p[2] + Math.sin(a + 1) * rr, 0, 0, 0, [PAL.white, PAL.cyan, PAL.frost, PAL.violet][i % 4], 0.45 + rnd() * 0.5, 0.5, base + u * L, land(base + u * L), 3, rnd(), 0.8 + rnd() * 3, 0, false); }
+      if (rnd() < 0.6) { const tip = B(0.92), len = 0.03 + rnd() * 0.05; for (let i = 0; i < 16; i++) { const v = i / 15; put(tip[0], tip[1] - v * len, tip[2], 0, 0, 0, PAL.white, 0.8 * (1 - v * 0.5), 0.95 - v * 0.4, base + L + v * 0.05, land(base + L) + 0.1, 7, rnd(), 1 + rnd() * 2, 0, false); } }
+      tips.push([...B(0.98), base + L]);
+    }
+  }
+  for (const [x, y, z, path] of tips) if (rnd() < 0.42) put(x, y - 0.012, z, 0, 0, 0, [PAL.white, PAL.cyan, PAL.violet, PAL.pink, PAL.frost, PAL.gold][count % 6], 3.4 + rnd() * 2.2, 0.95, path, land(path) + 0.12, 4, rnd(), 1, 0, false);
+  for (let a = 0; a < 6; a++) {
+    const ang = a / 6 * TAU - Math.PI / 2, ca = Math.cos(ang), sa = Math.sin(ang);
+    for (let i = 0; i < 60; i++) { const r = rnd() * 0.1; put(ca * r, STY - sa * r, 0, 0, 0, 0, i % 3 ? PAL.white : PAL.frost, 0.85 + rnd() * 0.7, 1, TH + 0.08 + r, 2.85 + r * 4, 5, rnd(), 1 + rnd(), 0, false); }
+    for (const at of [0.048, 0.072]) for (const sd of [-1, 1]) { const a2 = ang + sd * 1.0472, c2 = Math.cos(a2), s2 = Math.sin(a2); for (let i = 0; i < 12; i++) { const v = rnd() * 0.03; put(ca * at + c2 * v, STY - (sa * at + s2 * v), 0, 0, 0, 0, PAL.white, 0.75 + rnd() * 0.5, 1, TH + 0.08 + at + v, 2.85 + at * 4 + v * 4, 5, rnd(), 1, 0, false); } }
+  }
+  const nTree = count;
+  for (let i = 0, n = Math.round(4 * limbs.length * Math.max(Q, 0.6)); i < n; i++) { const lb = limbs[i % limbs.length]; put(lb[0], lb[1], lb[2], lb[3], 0, 0, rnd() < 0.55 ? PAL.white : rnd() < 0.6 ? PAL.cyan : PAL.gold, 1.0 + rnd() * 0.6, 0.9, 0, 0, 15, rnd(), 0, rnd(), true); }
+  const tailN = touchOnly ? 150 : 230, COMET_COL = [PAL.cyan, PAL.gold, PAL.violet, PAL.white, PAL.pink, PAL.cyan, PAL.gold];
+  for (let c = 0; c < NC + NSC; c++) {
+    const col = COMET_COL[c % COMET_COL.length];
+    put(0, 0, 0, c, 0, 0, col, 4.2, 1, 0, 0, 16, 0.25, 0, 0, false);              // head flare
+    put(0, 0, 0, c, 0.002, 0, col, 9, 0.3, 0, 0, 16, 0.25, 0, 0, false);         // head glow
+    for (let k = 0, n = touchOnly ? 36 : 64; k < n; k++) { const th = rnd() * TAU, el = (rnd() - 0.5) * 2; put(Math.cos(th), el, Math.sin(th), c, 2 + rnd(), 0, rnd() < 0.5 ? PAL.white : col, 0.6 + rnd() * 0.7, 0.9, 0, 0, 16, rnd(), 4 + rnd() * 6, 0, false); }  // glitter it sheds
+    for (let k = 1; k < tailN; k++) put(0, 0, 0, c, k / (tailN - 1), 0, col, 2.6, 0.8, 0, 0, 16, 0.25, 0, 0, false);
+  }
+  const mirrorEnd = count;
+  for (let i = 0, n = Math.round(700 * Q); i < n; i++) { const r = 0.12 + Math.pow(rnd(), 0.7) * 1.3, a = rnd() * TAU; put(Math.cos(a) * r, FY - 0.004, Math.sin(a) * r, 0, 0, 0, rnd() < 0.6 ? PAL.white : PAL.cyan, 0.4 + rnd() * 0.7, 0.45, 0, 0, 8, rnd(), 2 + rnd() * 4, 0, false); }
+  for (let g = 0; g < 2; g++) for (let i = 0, n = touchOnly ? 200 : 320; i < n; i++) {
+    const th = rnd() * TAU, el = -0.35 + rnd() * 1.75, ce = Math.cos(el);
+    put(g, 0, 0, Math.cos(th) * ce, Math.sin(el), Math.sin(th) * ce, rnd() < 0.45 ? PAL.white : rnd() < 0.55 ? PAL.cyan : PAL.gold, 0.7 + rnd() * 0.8, 0.95, 0, 0, 10, rnd(), 3 + rnd() * 3, rnd(), true);
+  }
+  for (let i = 0, n = Math.round(150 * Math.max(Q, 0.6)); i < n; i++) { const r = 0.3 + Math.sqrt(rnd()) * 1.25, a = rnd() * TAU; put(Math.cos(a) * r, FY + rnd() * 2.0, Math.sin(a) * r, 0, 0, 0, PAL.white, 1.0 + rnd() * 1.2, 0.45, 0, 0, 13, rnd(), 1, 0, rnd() < 0.5); }
+  for (let i = 0; i < 26; i++) put(0.75 + rnd() * 0.5, FY + 0.2 + rnd() * 1.1, 0, 0, 0, 0, rnd() < 0.7 ? PAL.white : PAL.cyan, 2.0 + rnd() * 1.5, 0.9, 0, 0, 14, rnd(), 1, 0, false);
+  const TOTAL = count;
+  const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+  const lvbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, lvbo); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ldata), gl.STATIC_DRAW);
+  data.length = 0; ldata.length = 0;
+  const A_NAMES = ['aHome', 'aDir', 'aCol', 'aP1', 'aP2', 'aEnd'], A_SIZE = [3, 3, 3, 4, 4, 1], A_OFF = [0, 12, 24, 36, 52, 68];
+  const AP = A_NAMES.map(n => gl.getAttribLocation(P.pt.p, n)), AL = A_NAMES.map(n => gl.getAttribLocation(P.ln.p, n));
+  window.__frostCount = TOTAL; window.__frostLines = lverts / 2;
+
+  // ======================= layout, render targets =======================
+  let W = 0, H = 0, DPR = 1, S = 0, CX = 0, CY = 0, FLOOR = 0, q = touchOnly ? 0.75 : 1, RW = 0, RH = 0, RT = {}, flip = 0;
+  function freeRT(t) { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); } }
+  function clearRT(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, t.w, t.h); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+  function buildTargets() {
+    if (RT.scene) { [RT.scene, RT.fresh, RT.tr[0], RT.tr[1], RT.rays, ...RT.down, ...RT.up].forEach(freeRT); }
+    RW = Math.max(2, Math.round(W * DPR * q)); RH = Math.max(2, Math.round(H * DPR * q));
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    const ts = DPR * q >= 1.4 ? 0.5 : 0.72, TW = Math.max(2, Math.round(RW * ts)), THh = Math.max(2, Math.round(RH * ts));
+    RT.scene = makeRT(RW, RH, FMT); RT.fresh = makeRT(TW, THh, FMT); RT.tr = [makeRT(TW, THh, FMT), makeRT(TW, THh, FMT)];
+    RT.tr.forEach(clearRT);
+    RT.down = []; RT.up = [];
+    let w = RW, h = RH;
+    for (let i = 0; i < 6; i++) { w = Math.max(2, w >> 1); h = Math.max(2, h >> 1); RT.down.push(makeRT(w, h, FMT)); RT.up.push(makeRT(w, h, FMT)); }
+    RT.rays = makeRT(RT.down[1].w, RT.down[1].h, FMT);
+    prevS = null;                                             // no trail across a resize
+  }
+  function resize() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, touchOnly ? 1.5 : 2);
+    S = Math.min(H * (W < H ? 0.58 : 0.64), W * (W < H ? 0.8 : 0.92));
+    CX = W / 2; CY = H * (W < H ? 0.45 : 0.46);
+    const kp = D / (D + FY * sT); FLOOR = CY - (FY * cT) * kp * S;
+    buildTargets();
+    if (reduce) frame(0);
+  }
+  function proj(x, y, z) { const y2 = y * cT - z * sT, z2 = y * sT + z * cT, kp = D / (D + z2); return [CX + x * kp * S, CY - y2 * kp * S, z2, kp]; }
+
+  // ======================= interaction =======================
+  const ptr = { x: -9999, y: -9999, active: false };
+  const vort = { x: -9999, y: -9999, a: 0 };
+  const pulses = [];
+  let interacted = false, dragging = false, downY = 0, lastX = 0, moved = 0, spin = 0, lastTap = 0, tapTimer = 0;
+  let burstAt = -99, burstPos = [0, 0], stormAt = -99, lastPulseAt = -9, waveAt = -99, rot = 0.5;
+  function noteInteract() { if (!interacted) { interacted = true; hint.classList.remove('on'); } }
+  function nearest(x, y) {
+    const cr = Math.cos(rot), sr = Math.sin(rot); let best = null, bd = 44 * 44;
+    for (const p of pick) { const X = p[0] * cr - p[2] * sr, Z = p[0] * sr + p[2] * cr, s = proj(X, p[1], Z), dx = s[0] - x, dy = s[1] - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = p; } }
+    return best;
+  }
+  function addPulse(d, o, amp) { pulses.push({ t: T, d, o, amp }); if (pulses.length > 8) pulses.shift(); }
+  cv.addEventListener('pointermove', e => {
+    const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+    if (ptr.active && !reduce && !dragging) {                // stirring: pointer speed winds up a whirlpool around it
+      const sp = Math.min(Math.hypot(dx, dy), 60); vort.a = Math.max(-3.0, Math.min(3.0, vort.a + (dx * 0.7 + dy * 0.3 >= 0 ? 1 : -1) * sp * 0.009));
+    }
+    ptr.x = e.clientX; ptr.y = e.clientY; ptr.active = true; vort.x = ptr.x; vort.y = ptr.y;
+    if (dragging) { const ddx = e.clientX - lastX; lastX = e.clientX; moved += Math.abs(ddx) + Math.abs(e.clientY - downY) * 0.2; const k = 5.4 / Math.min(W, 900); rot += ddx * k; spin = spin * 0.6 + ddx * k * 60 * 0.4; if (reduce) frame(0); }
+  });
+  cv.addEventListener('pointerdown', e => { ptr.x = e.clientX; ptr.y = e.clientY; vort.x = ptr.x; vort.y = ptr.y; ptr.active = true; dragging = true; moved = 0; lastX = e.clientX; downY = e.clientY; spin = 0; cv.classList.add('drag'); try { cv.setPointerCapture(e.pointerId); } catch (_) {} noteInteract(); });
+  cv.addEventListener('pointerleave', e => { if (!dragging && e.pointerType === 'mouse') ptr.active = false; });
+  function release(e) {
+    if (!dragging) return; dragging = false; cv.classList.remove('drag');
+    if (moved < 7 && !reduce) {
+      const now = performance.now();
+      if (now - lastTap < 320) { clearTimeout(tapTimer); storm(); lastTap = 0; }
+      else { lastTap = now; const x = e.clientX, y = e.clientY; tapTimer = setTimeout(() => burst(x, y), 240); }
+    } else if (touchOnly && !reduce && moved >= 7) { vort.a = Math.max(-2.6, Math.min(2.6, vort.a + 1.2)); }
+    if (e.pointerType !== 'mouse') ptr.active = false;
+  }
+  cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release);
+  cv.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const d = e.key === 'ArrowLeft' ? -1 : 1; if (reduce) { rot += d * 0.22; frame(0); } else spin += d * 1.5; noteInteract(); }
+    else if ((e.key === 'Enter' || e.key === ' ') && !reduce) { e.preventDefault(); burst(CX, CY - S * 0.15); noteInteract(); }
+    else if ((e.key === 's' || e.key === 'S') && !reduce) { storm(); noteInteract(); }
+  });
+  function burst(x, y) {
+    if (T - burstAt < 0.9 || T < 3) return;
+    burstAt = T; burstPos = [x, y];
+    const p = nearest(x, y); if (p) setTimeout(() => addPulse(p[3], p, 2.0), 1100);
+  }
+  function storm() { if (T - stormAt > 5.5 && T > 3) { stormAt = T; stormComets.forEach(c => { c.n = 0; }); } }
+
+  // comets: three always climb; a storm launches more. Each arrival at the crown throws a firework.
+  const comets = [], stormComets = [];
+  for (let i = 0; i < NC; i++) comets.push({ t0: C_T0 + i * C_DT, sp: C_SP, n: 0 });
+  for (let i = 0; i < NSC; i++) stormComets.push({ j: i, n: 0 });
+  let sparkT = [-99, -99], sparkFlip = 0, lastArrival = -99, crownBurst = false;
+  function arrive() {
+    lastArrival = T;
+    const g = sparkFlip; if (T - sparkT[g] > 1.0) { sparkT[g] = T; sparkFlip = 1 - g; }
+  }
+  function cometTick() {
+    if (!crownBurst && T > 3.1) { crownBurst = true; arrive(); }
+    for (const c of comets) { const ph = (T - c.t0) * c.sp, n = Math.floor(ph); if (ph > 0 && n > c.n) { c.n = n; arrive(); } }
+    if (T - stormAt < 5) for (const c of stormComets) { const ph = (T - (stormAt + c.j * CS_DT)) * CS_SP, n = Math.floor(ph); if (ph > 0 && n > c.n) { c.n = n; arrive(); } }
+  }
+
+  // ======================= frame =======================
+  let T = 0, t0 = 0, last = 0, readyShown = false, hintShown = false, acc = 0, frames = 0, snowT = 0, stormAng = 0, prevS = null;
+  const pulseU = new Float32Array(32), pulseO = new Float32Array(24);
+  function bindQuad() { gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); }
+  function pass(pr, target, setup) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+    gl.viewport(0, 0, target ? target.w : cv.width, target ? target.h : cv.height);
+    gl.useProgram(pr.p); bindQuad(); setup(pr.u);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function tex(unit, t, u) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t.tex); gl.uniform1i(u, unit); }
+  function bindParticles(locs, buf, stride, withEnd) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    for (let i = 0; i < 6; i++) {
+      const l = locs[i]; if (l < 0) continue;
+      if (i < 5 || withEnd) { gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, A_SIZE[i], gl.FLOAT, false, stride, A_OFF[i]); }
+      else { gl.disableVertexAttribArray(l); gl.vertexAttrib1f(l, 0); }
+    }
+  }
+  function unbindParticles(locs) { for (let i = 1; i < 6; i++) if (locs[i] >= 0) gl.disableVertexAttribArray(locs[i]); }
+  function setParticleUniforms(u, s, p) {
+    gl.uniform2f(u.uRes, W, H); gl.uniform1f(u.uPx, DPR * q); gl.uniform1f(u.uS, S); gl.uniform1f(u.uCX, CX); gl.uniform1f(u.uCY, CY);
+    gl.uniform1f(u.uFloor, FLOOR); gl.uniform1f(u.uFade, S * 0.36); gl.uniform1f(u.uUnit, S / 560); gl.uniform1f(u.uOut, FMT.k); gl.uniform1f(u.uStormAt, stormAt);
+    gl.uniform4f(u.uF0, s.time, s.IT, s.rot, s.wave); gl.uniform4f(u.uF1, p.time, p.IT, p.rot, p.wave);
+    gl.uniform4f(u.uG0, s.snowT, s.stormAng, s.storm, s.flash); gl.uniform4f(u.uG1, p.snowT, p.stormAng, p.storm, p.flash);
+    gl.uniform4f(u.uB0, s.bx, s.by, s.bt, s.bR); gl.uniform4f(u.uB1, p.bx, p.by, p.bt, p.bR);
+    gl.uniform4f(u.uV0, s.vx, s.vy, s.va, s.vr); gl.uniform4f(u.uV1, p.vx, p.vy, p.va, p.vr);
+    gl.uniform2f(u.uK0, s.k0, s.k1); gl.uniform2f(u.uK1, p.k0, p.k1);
+    gl.uniform4fv(u.uPulse, pulseU); gl.uniform3fv(u.uPulseO, pulseO);
+  }
+
+  function frame(dt) {
+    if (!reduce) {
+      if (T > 6 && T - waveAt > 8) waveAt = T;
+      if (ptr.active && T > 3.5 && T - lastPulseAt > 0.3) { const p = nearest(ptr.x, ptr.y); if (p) { lastPulseAt = T; addPulse(p[3], p, 1.5); } }
+      vort.a *= Math.pow(0.3, dt);                            // the whirlpool unwinds when the pointer rests
+      cometTick();
+    }
+    const stv = reduce ? 0 : (T - stormAt < 5 ? Math.min(1, (T - stormAt) / 0.5) * Math.min(1, (5 - (T - stormAt)) / 1.2) : 0);
+    snowT += dt * (1 + stv * 1.6); stormAng += dt * stv * 2.4;
+    pulseU.fill(0); pulseO.fill(0);
+    pulses.forEach((p, i) => { pulseU[i * 4] = p.d; pulseU[i * 4 + 1] = p.t; pulseU[i * 4 + 2] = T - p.t < 2.6 ? p.amp : 0; pulseU[i * 4 + 3] = p.o ? 1 : 0; if (p.o) { pulseO[i * 3] = p.o[0]; pulseO[i * 3 + 1] = p.o[1]; pulseO[i * 3 + 2] = p.o[2]; } });
+    const star = reduce ? 1 : clamp01((T - 2.95) / 0.6);
+    const s = reduce
+      ? { time: 8.2, IT: 99, rot, wave: -1, snowT: 8.2, stormAng: 0, storm: 0, flash: 0.15, bx: 0, by: 0, bt: 9, bR: 1, vx: -9999, vy: -9999, va: 0, vr: 100, k0: 7.6, k1: -99 }
+      : { time: T, IT: T, rot, wave: T - waveAt < 1.9 ? T - waveAt : -1, snowT, stormAng, storm: stv, flash: Math.exp(-(T - lastArrival) * 4),
+          bx: burstPos[0], by: burstPos[1], bt: T - burstAt, bR: Math.min(W, H) * 0.42, vx: vort.x, vy: vort.y, va: vort.a, vr: Math.min(W, H) * 0.19, k0: sparkT[0], k1: sparkT[1] };
+    const p = prevS || s;
+
+    // ---- crisp layer: every particle as a sprite, plus its reflection in the ice ----
+    clearRT(RT.scene);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(P.pt.p); bindParticles(AP, vbo, 68, false);
+    setParticleUniforms(P.pt.u, s, s);
+    gl.uniform1f(P.pt.u.uLine, 0);
+    gl.uniform1f(P.pt.u.uMirror, 1); gl.drawArrays(gl.POINTS, 0, mirrorEnd);
+    gl.uniform1f(P.pt.u.uMirror, 0); gl.drawArrays(gl.POINTS, 0, TOTAL);
+    unbindParticles(AP);
+    // ---- motion layer: last frame -> this frame, as lines; the feedback buffer keeps them as trails ----
+    clearRT(RT.fresh);
+    if (!reduce && prevS) {
+      gl.useProgram(P.ln.p); bindParticles(AL, lvbo, 72, true);
+      setParticleUniforms(P.ln.u, s, p);
+      gl.uniform1f(P.ln.u.uLine, 1); gl.uniform1f(P.ln.u.uMirror, 0);
+      gl.drawArrays(gl.LINES, 0, lverts);
+      unbindParticles(AL);
+    }
+    gl.disable(gl.BLEND);
+    const cur = RT.tr[flip], prev = RT.tr[1 - flip]; flip = 1 - flip;
+    const decay = reduce ? 0 : Math.pow(T < 3.2 ? 0.87 : 0.85, Math.min(dt, 0.05) * 60);
+    pass(P.trail, cur, U => { tex(0, RT.fresh, U.uNew); tex(1, prev, U.uOld); gl.uniform1f(U.uDecay, decay); });
+    prevS = reduce ? null : s;
+    // ---- bloom from both layers ----
+    let src = RT.scene;
+    RT.down.forEach((t, i) => { pass(P.down, t, U => { tex(0, src, U.uTex); tex(1, cur, U.uTex2); gl.uniform2f(U.uTexel, 1 / src.w, 1 / src.h); gl.uniform1f(U.uFirst, i === 0 ? 1 : 0); gl.uniform1f(U.uThresh, 0.9 * FMT.k); }); src = t; });
+    let upSrc = RT.down[5];
+    for (let i = 4; i >= 0; i--) { const t = RT.up[i]; pass(P.up, t, U => { tex(0, upSrc, U.uTex); tex(1, RT.down[i], U.uAdd); gl.uniform2f(U.uTexel, 1 / upSrc.w, 1 / upSrc.h); }); upSrc = t; }
+    const sp = proj(0, STY, 0);
+    pass(P.rays, RT.rays, U => { tex(0, RT.down[1], U.uTex); gl.uniform2f(U.uLight, sp[0] / W, 1 - sp[1] / H); gl.uniform1f(U.uDecay, 0.955); gl.uniform1f(U.uWeight, 0.085); gl.uniform1f(U.uAspect, W / H); });
+    pass(P.comp, null, U => {
+      tex(0, RT.scene, U.uScene); tex(1, cur, U.uTrail); tex(2, RT.up[0], U.uBloom); tex(3, RT.rays, U.uRays);
+      gl.uniform1f(U.uInv, 1 / FMT.k); gl.uniform1f(U.uBloomK, 0.8); gl.uniform1f(U.uRaysK, 0.42 * star * (1 + 0.45 * s.flash));
+      gl.uniform1f(U.uT, s.time); gl.uniform1f(U.uS, S); gl.uniform1f(U.uFloor, FLOOR); gl.uniform1f(U.uGlow, reduce ? 1 : clamp01((T - 0.5) / 2.5)); gl.uniform1f(U.uRip, reduce ? -1 : (T - burstAt < 2.6 && T - burstAt < T ? T - burstAt : T));
+      gl.uniform2f(U.uRes, cv.width, cv.height); gl.uniform2f(U.uC, CX, CY); gl.uniform2f(U.uCss, W, H);
+    });
+  }
+  function adapt(dt) {
+    acc += dt; frames++;
+    if (acc < 1.2) return;
+    const avg = acc / frames * 1000; acc = 0; frames = 0;
+    if (avg > 21 && q > 0.5) { q = Math.max(0.5, q * 0.85); buildTargets(); }
+  }
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    if (!dragging) { spin += (TAU / 40 - spin) * Math.min(1, dt * 1.3); rot += spin * dt; }
+    for (let i = pulses.length - 1; i >= 0; i--) if (T - pulses[i].t > 2.6) pulses.splice(i, 1);
+    frame(dt);
+    if (T > 5) adapt(dt);
+    if (!readyShown && T > 3.6) { readyShown = true; document.body.classList.add('ready'); }
+    if (!interacted && !hintShown && T > 5.5) { hintShown = true; hint.classList.add('on'); setTimeout(() => hint.classList.remove('on'), 6500); }
+    requestAnimationFrame(loop);
+  }
+  addEventListener('resize', resize);
+  if (reduce) { T = 20; document.body.classList.add('ready'); hint.textContent = touchOnly ? '滑动旋转' : '拖动旋转'; hint.classList.add('on'); }
+  resize();
+  if (!reduce) requestAnimationFrame(loop);
+
+  function staticFallback() {
+    const fresh = cv.cloneNode(false); cv.replaceWith(fresh); cv = fresh;
+    const g = cv.getContext('2d'), w = innerWidth, h = innerHeight, d = Math.min(devicePixelRatio || 1, 2);
+    cv.width = w * d; cv.height = h * d; g.scale(d, d);
+    const gr = g.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, Math.max(w, h) * 0.8);
+    gr.addColorStop(0, '#0d3354'); gr.addColorStop(0.5, '#061a2e'); gr.addColorStop(1, '#01050b'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const S2 = Math.min(h * 0.62, w * 0.9), cx = w / 2, by = h * 0.8;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.85; g.fillStyle = '#d8efff'; g.fillRect(cx - 3, by - S2 * 0.2, 6, S2 * 0.2);
+    for (let i = 0; i < 5000; i++) { const u = Math.random(), y = by - S2 * 0.1 - u * S2 * 0.9, half = (1 - u) * S2 * 0.36, x = cx + (Math.random() * 2 - 1) * half * Math.sqrt(Math.random()); g.globalAlpha = 0.25 + Math.random() * 0.5; g.fillStyle = Math.random() < 0.6 ? '#bfe6ff' : '#7fd0ff'; g.fillRect(x, y, 1.6, 1.6); }
+    const sy = by - S2 - 4; g.globalAlpha = 1; g.strokeStyle = '#f2fbff'; g.lineWidth = 2; g.beginPath();
+    for (let a = 0; a < 6; a++) { const t = a * Math.PI / 3; g.moveTo(cx, sy); g.lineTo(cx + Math.cos(t) * 16, sy + Math.sin(t) * 16); } g.stroke();
+    document.body.classList.add('ready');
+  }
+})();
+</script>
+</body>
+</html>

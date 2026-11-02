@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2a1530">
+<title>折纸 · Origami</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --plum: #2a1530; --paper: #f3ead8; --ink: #4a2440; --coral: #d9534a; }
+  html, body { margin: 0; height: 100%; background: var(--plum); overflow: hidden; }
+  body { -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; outline: none; }
+  #gl:focus-visible { box-shadow: inset 0 0 0 2px rgba(243,234,216,.45); }
+  .ribbon {
+    position: fixed; left: 50%; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 1vh); margin: 0;
+    transform: translateX(-50%) translateY(10px); opacity: 0; pointer-events: none;
+    font-family: 'Shippori Mincho', 'Songti SC', 'Noto Serif SC', Georgia, serif; font-weight: 500;
+    font-size: clamp(15px, 1.6vw, 21px); letter-spacing: .22em; text-indent: .22em; white-space: nowrap;
+    color: var(--ink); background: linear-gradient(180deg, #f8f1e3, #e9dcc4);
+    padding: .5em 1.6em .55em; box-shadow: 0 6px 14px rgba(20, 5, 20, .45);
+    clip-path: polygon(0 0, 100% 0, calc(100% - .8em) 50%, 100% 100%, 0 100%, .8em 50%);
+    transition: opacity 1.4s ease, transform 1.4s cubic-bezier(.2,.8,.2,1);
+  }
+  .ready .ribbon { opacity: 1; transform: translateX(-50%); }
+  .hint {
+    position: fixed; left: 0; right: 0; top: calc(max(14px, env(safe-area-inset-top)) + 2.6vh); margin: 0; text-align: center; pointer-events: none;
+    font: 500 13px/1.5 'Shippori Mincho', 'Songti SC', 'Noto Serif SC', serif; letter-spacing: .16em; color: rgba(243, 234, 216, .62);
+    opacity: 0; transition: opacity 1.2s ease;
+  }
+  .hint.on { opacity: 1; }
+  #fallback { display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: #2a1530; }
+  .nogl #fallback { display: block; } .nogl #gl { display: none; }
+  @media (prefers-reduced-motion: reduce) { .ribbon { transition: none; opacity: 1; transform: translateX(-50%); } .hint { transition: none; } }
+
+  /* site navigation: back to the overview, previous / next tree */
+  .tnav { position: fixed; z-index: 50; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+    background: rgba(8, 8, 12, .45); color: rgba(255, 255, 255, .9); font: 500 13px/1 system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; letter-spacing: .02em;
+    opacity: .66; transition: opacity .25s ease; -webkit-user-select: none; user-select: none; }
+  .tnav:hover, .tnav:focus-within { opacity: 1; }
+  .tnav a, .tnav span { display: inline-flex; align-items: center; justify-content: center; height: 30px; min-width: 32px; padding: 0 10px; border-radius: 999px; color: inherit; text-decoration: none; }
+  .tnav a:hover { background: rgba(255, 255, 255, .16); }
+  .tnav a:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+  .tnav .arr { font-size: 18px; padding: 0 8px; }
+  .tnav span { min-width: 0; padding: 0 2px; opacity: .72; font-variant-numeric: tabular-nums; }
+  .tnav.light { background: rgba(255, 255, 255, .62); color: rgba(32, 28, 24, .86); }
+  .tnav.light a:hover { background: rgba(0, 0, 0, .08); }
+  @media (hover: none) { .tnav { opacity: .82; } .tnav a { height: 36px; min-width: 38px; } }
+</style>
+</head>
+<body>
+<nav class="tnav" aria-label="圣诞树十种"><a href="index.html">总览</a><a class="arr" href="tree-02.html" aria-label="上一棵">‹</a><span>03/10</span><a class="arr" href="tree-04.html" aria-label="下一棵">›</a></nav>
+
+<canvas id="gl" tabindex="0" role="img" aria-label="用一百多片折纸叶片组成的圣诞树，几只纸鹤绕树飞行；移动指针改变灯光方向，点击让纸叶重新折叠一遍"></canvas>
+<svg id="fallback" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" role="img" aria-label="折纸圣诞树的静态插图">
+  <rect width="1000" height="1000" fill="#2a1530"/>
+  <g stroke="#1a0c1e" stroke-width="2" stroke-linejoin="round">
+    <polygon points="500,220 330,500 500,470" fill="#5aa37e"/><polygon points="500,220 670,500 500,470" fill="#2f7d5d"/>
+    <polygon points="500,380 280,680 500,640" fill="#3f8f6b"/><polygon points="500,380 720,680 500,640" fill="#24694f"/>
+    <polygon points="500,540 240,830 500,790" fill="#2f7d5d"/><polygon points="500,540 760,830 500,790" fill="#1d5843"/>
+    <polygon points="440,820 560,820 550,880 450,880" fill="#d9534a"/>
+    <polygon points="500,150 520,195 500,215 480,195" fill="#e6b85c"/>
+  </g>
+</svg>
+<p class="hint" id="hint">移动指针挪动灯光，点一下让纸叶重新折一遍</p>
+<p class="ribbon">Merry Christmas</p>
+<script>
+(() => {
+  'use strict';
+  const cv = document.getElementById('gl');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const touchOnly = matchMedia('(hover: none)').matches;
+  const hint = document.getElementById('hint');
+  if (touchOnly) hint.textContent = '手指拖动挪动灯光，轻点让纸叶重新折一遍';
+  const TAU = Math.PI * 2, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  let seed = 20251224; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  let gl = null;
+  try { gl = cv.getContext('webgl', { antialias: true, alpha: false, depth: true, powerPreference: 'high-performance' }); } catch (e) {}
+  const fail = (e) => { if (e) console.warn('Origami falls back to a still image:', e); document.documentElement.classList.add('nogl'); document.body.classList.add('ready'); };
+  if (!gl) { fail(); return; }
+
+  // ---------------- shaders ----------------
+  const VS_BG = 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }';
+  const FS_BG = `precision highp float;
+uniform vec2 uRes, uPool, uShadow; uniform float uFloor, uShR, uDpr;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void main(){
+  vec2 fc = gl_FragCoord.xy / uDpr; fc.y = uRes.y - fc.y;
+  vec2 p = fc / uRes;
+  vec3 col = mix(vec3(0.1, 0.045, 0.1), vec3(0.24, 0.12, 0.21), smoothstep(0.0, 0.75, p.y));
+  col = mix(col, vec3(0.3, 0.17, 0.26), smoothstep(uFloor / uRes.y - 0.1, 1.0, p.y));      // paper sweep turning into floor
+  float d = length((fc - uPool) / uRes.y);
+  col += vec3(0.48, 0.3, 0.32) * exp(-d * d * 5.0) * 0.55;                                   // lamp pool on the backdrop
+  vec2 s = (fc - uShadow) / vec2(uShR, uShR * 0.22);
+  col *= 1.0 - 0.45 * exp(-dot(s, s) * 1.6);                                                  // soft contact shadow
+  float g = vn(fc * 0.9) * 0.5 + vn(fc * vec2(0.12, 1.6)) * 0.5;                              // paper grain and fibres
+  col *= 0.94 + 0.09 * g;
+  vec2 v = p - 0.5; col *= 1.0 - dot(v, v) * 0.7;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  const VS = `attribute vec3 aP, aN, aF, aB; attribute vec3 aU;
+uniform mat4 uVP, uModel; varying vec3 vN, vW, vF, vB; varying vec3 vU;
+void main(){ vec4 w = uModel * vec4(aP, 1.0); vN = mat3(uModel) * aN; vW = w.xyz; vF = aF; vB = aB; vU = aU; gl_Position = uVP * w; }`;
+  const FS = `precision highp float;
+uniform vec3 uL, uCam;
+varying vec3 vN, vW, vF, vB; varying vec3 vU;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void main(){
+  vec3 n = normalize(vN), v = normalize(uCam - vW);
+  bool front = dot(n, v) > 0.0;
+  vec3 base = front ? vF : vB;                  // origami paper: coloured face, white back
+  if (!front) n = -n;
+  float kind = vU.z;
+  float g = vn(vU.xy * vec2(46.0, 46.0)) * 0.55 + vn(vU.xy * vec2(120.0, 14.0)) * 0.45;
+  base *= 0.92 + 0.12 * g;
+  float ndl = dot(n, uL);
+  float diff = max(ndl * 0.72 + 0.28, 0.0);
+  vec3 amb = mix(vec3(0.24, 0.13, 0.24), vec3(0.5, 0.44, 0.5), n.y * 0.5 + 0.5);
+  vec3 col = base * (amb * 0.62 + vec3(1.0, 0.93, 0.82) * diff * 0.95);
+  if (kind < 0.5) {
+    float cr = smoothstep(0.08, 0.0, abs(vU.y));
+    col *= 1.0 + cr * 0.14 * sign(ndl);                               // a crisp crease line
+    col *= mix(0.55, 1.0, smoothstep(0.0, 0.75, vU.x));                 // shadowed toward the trunk
+  }
+  if (kind > 0.5 && kind < 1.5) {                                       // gold foil
+    vec3 r = reflect(-v, n);
+    col += vec3(1.0, 0.82, 0.5) * pow(max(dot(r, uL), 0.0), 18.0) * 1.1;
+    col += vec3(0.35, 0.22, 0.08) * pow(1.0 - abs(dot(n, v)), 2.0);
+  }
+  col += vec3(0.06, 0.03, 0.05) * pow(1.0 - abs(dot(n, v)), 3.0);      // soft paper sheen at grazing angles
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  const VS_PT = `attribute vec3 aPos; attribute vec4 aCol; attribute vec3 aSz;
+uniform vec2 uPx; uniform float uDpr; varying vec4 vCol; varying vec2 vSp;
+void main(){ vec2 c = aPos.xy / uPx * 2.0 - 1.0; c.y = -c.y; gl_Position = vec4(c, aPos.z, 1.0);
+  gl_PointSize = max(1.0, aSz.x * uDpr); vCol = aCol; vSp = aSz.yz; }`;
+  const FS_PT = `precision mediump float; varying vec4 vCol; varying vec2 vSp;
+void main(){
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  if (vSp.y > 50.0) {                                        // warm fairy-light glow
+    float d = dot(p, p); if (d > 1.0) discard;
+    float a = (exp(-d * 22.0) + exp(-d * 4.0) * 0.55) * vCol.a * (1.0 - d);
+    gl_FragColor = vec4(mix(vCol.rgb, vec3(1.0, 0.97, 0.9), exp(-d * 40.0)) * a, 1.0); return;
+  }
+  float c = cos(vSp.x), s = sin(vSp.x);
+  p = vec2(c * p.x - s * p.y, s * p.x + c * p.y);           // spin in plane
+  float w = abs(cos(vSp.y));                                 // tumble: the square narrows as it flips
+  if (abs(p.x) > w * 0.62 || abs(p.y) > 0.62) discard;
+  float shade = 0.72 + 0.28 * cos(vSp.y);
+  gl_FragColor = vec4(vCol.rgb * shade, vCol.a);
+}`;
+
+  function sh(t, s) { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; }
+  function prog(v, f) { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, v)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; }
+  const U = (p, n) => Object.fromEntries(n.map(k => [k, gl.getUniformLocation(p, k)]));
+  let pBg, pM, pPt, uBg, uM, uPt;
+  try {
+    pBg = prog(VS_BG, FS_BG); pM = prog(VS, FS); pPt = prog(VS_PT, FS_PT);
+    uBg = U(pBg, ['uRes', 'uPool', 'uShadow', 'uFloor', 'uShR', 'uDpr']); uM = U(pM, ['uVP', 'uModel', 'uL', 'uCam']); uPt = U(pPt, ['uPx', 'uDpr']);
+  } catch (e) { fail(e); return; }
+  cv.addEventListener('webglcontextlost', e => e.preventDefault()); cv.addEventListener('webglcontextrestored', () => location.reload());
+  const aBg = gl.getAttribLocation(pBg, 'p');
+  const aM = ['aP', 'aN', 'aF', 'aB', 'aU'].map(n => gl.getAttribLocation(pM, n));
+  const aPt = ['aPos', 'aCol', 'aSz'].map(n => gl.getAttribLocation(pPt, n));
+  const vbTri = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbTri); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+
+  // ---------------- math ----------------
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const scl = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const hex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+  function persp(fy, asp, n, f) { const t = 1 / Math.tan(fy / 2); return [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]; }
+  function lookAt(e, c) { const z = norm(sub(e, c)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+    return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]; }
+  function mul(a, b) { const o = new Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; }
+
+  // ---------------- model ----------------
+  const GREENS = ['#174a39', '#1f5b47', '#28704f', '#348360', '#4a9a73', '#6cb38c'].map(hex);
+  const BACK = hex('#dbe5d2'), CREAM = hex('#f6efe2'), GOLD = hex('#d9a54a'), CORAL = hex('#d9534a'), KRAFT = hex('#a67a4e');
+  const NLEAF = touchOnly ? 150 : 185;
+  const leaves = [];
+  for (let i = 0; i < NLEAF; i++) {
+    const h = Math.pow(i / (NLEAF - 1), 0.92);                      // 0 bottom → 1 top
+    const snowy = rnd() < 0.06 && h > 0.35;
+    leaves.push({
+      h, y: -0.68 + h * 1.5, phi: i * 2.39996 + rnd() * 0.2,
+      L: (0.74 * Math.pow(1 - h, 1.0) + 0.1) * (0.86 + rnd() * 0.26),
+      droop: (0.26 + 0.2 * (1 - h)) + (rnd() - 0.5) * 0.12, roll: (rnd() - 0.5) * 0.2,
+      amax: (54 + rnd() * 16) * Math.PI / 180,
+      col: snowy ? CREAM : GREENS[Math.max(0, Math.min(5, Math.floor(h * 5.2 + (rnd() - 0.5) * 1.6 + 0.4)))],
+      start: 0.25 + h * 1.9 + rnd() * 0.12,
+    });
+  }
+  const cranes = Array.from({ length: touchOnly ? 4 : 6 }, (_, i) => ({
+    r: 1.18 + i * 0.13, y: -0.3 + ((i * 0.37) % 1) * 1.2, a: rnd() * TAU, w: (0.22 + rnd() * 0.14) * (i % 3 === 0 ? -1 : 1),
+    ph: rnd() * TAU, col: [CORAL, CREAM, GOLD, CREAM, CORAL, hex('#f0b8a8'), CREAM][i], s: 0.26 + rnd() * 0.05,
+  }));
+
+  const MAXV = 6000, vdata = new Float32Array(MAXV * 15);
+  const vbM = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbM); gl.bufferData(gl.ARRAY_BUFFER, vdata.byteLength, gl.DYNAMIC_DRAW);
+  let nv = 0;
+  function tri(a, b, c, inside, F, B, ua, ub, uc, kind) {
+    let n = norm(cross(sub(b, a), sub(c, a)));
+    const cen = scl(add(add(a, b), c), 1 / 3);
+    if (dot(n, sub(cen, inside)) < 0) n = scl(n, -1);
+    for (const [p, u] of [[a, ua], [b, ub], [c, uc]]) {
+      if (nv >= MAXV) return;
+      const o = nv * 15;
+      vdata[o] = p[0]; vdata[o + 1] = p[1]; vdata[o + 2] = p[2];
+      vdata[o + 3] = n[0]; vdata[o + 4] = n[1]; vdata[o + 5] = n[2];
+      vdata[o + 6] = F[0]; vdata[o + 7] = F[1]; vdata[o + 8] = F[2];
+      vdata[o + 9] = B[0]; vdata[o + 10] = B[1]; vdata[o + 11] = B[2];
+      vdata[o + 12] = u[0]; vdata[o + 13] = u[1]; vdata[o + 14] = kind;
+      nv++;
+    }
+  }
+  const rotYp = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return [c * p[0] + s * p[2], p[1], -s * p[0] + c * p[2]]; };
+
+  // one origami leaf: a diamond folded along its long diagonal (mountain fold)
+  function leaf(l, rot, grow, alpha) {
+    if (grow <= 0.001) return;
+    const phi = l.phi + rot, out = [Math.cos(phi), 0, Math.sin(phi)], tan = [-Math.sin(phi), 0, Math.cos(phi)];
+    const cd = Math.cos(l.droop), sd = Math.sin(l.droop);
+    const d = norm([out[0] * cd, -sd, out[2] * cd]);
+    let up = norm(cross(tan, d)); if (up[1] < 0) up = scl(up, -1);
+    const cr = Math.cos(l.roll), sr = Math.sin(l.roll);
+    const t2 = add(scl(tan, cr), scl(up, sr)), u2 = add(scl(up, cr), scl(tan, -sr));
+    const L = l.L * grow, w = L * 0.34, base = add([0, l.y, 0], scl(out, 0.035));
+    const ca = Math.cos(alpha), sa = Math.sin(alpha);
+    const P = (x, y) => add(base, add(scl(d, x), add(scl(t2, y * ca), scl(u2, -Math.abs(y) * sa))));
+    const C0 = P(0, 0), C1 = P(L, 0), Wp = P(L * 0.42, w), Wm = P(L * 0.42, -w);
+    const inside = add(P(L * 0.42, 0), scl(u2, -w * 1.5));
+    tri(C0, C1, Wp, inside, l.col, BACK, [0, 0], [1, 0], [0.42, 1], 0);
+    tri(C0, Wm, C1, inside, l.col, BACK, [0, 0], [0.42, -1], [1, 0], 0);
+  }
+  function crane(c, T) {
+    const a = c.a, pos = [Math.cos(a) * c.r, c.y + Math.sin(T * 0.8 + c.ph) * 0.05, Math.sin(a) * c.r];
+    const fwd = norm([-Math.sin(a) * Math.sign(c.w), 0, Math.cos(a) * Math.sign(c.w)]);
+    const toCam = norm(sub(CAM, pos)), tc = norm(sub(toCam, scl(fwd, dot(toCam, fwd))));
+    const up = norm(add(scl([0, 1, 0], 0.62), scl(tc, 0.38))), side = norm(cross(fwd, up));
+    const s = c.s, flap = reduce ? 0.5 : 0.5 + 0.3 * Math.sin(T * 4.2 + c.ph);
+    const P = (f, u, sd) => add(pos, add(scl(fwd, f * s), add(scl(up, u * s), scl(side, sd * s))));
+    const inside = P(0, -1, 0), F = c.col, B = BACK;
+    const wingL = P(-0.1, Math.sin(flap) * 1.3, -Math.cos(flap) * 1.3), wingR = P(-0.1, Math.sin(flap) * 1.3, Math.cos(flap) * 1.3);
+    tri(P(0.55, 0, 0), P(-0.6, 0, 0), wingL, inside, F, B, [0, 0], [1, 0], [0.5, 1], 2);
+    tri(P(0.55, 0, 0), P(-0.6, 0, 0), wingR, inside, F, B, [0, 0], [1, 0], [0.5, 1], 2);
+    tri(P(0.45, 0, 0), P(0.0, -0.3, 0), P(0.9, 0.52, 0), P(0, -2, 1.5), F, B, [0, 0], [1, 0], [1, 1], 2);    // neck
+    tri(P(0.9, 0.52, 0), P(0.8, 0.42, 0), P(1.12, 0.4, 0), P(0, -2, 1.5), F, B, [0, 0], [1, 0], [1, 1], 2);   // head
+    tri(P(-0.45, 0, 0), P(0.0, -0.3, 0), P(-0.92, 0.38, 0), P(0, -2, -1.5), F, B, [0, 0], [1, 0], [1, 1], 2); // tail
+  }
+  function staticParts(rot, starK, T, crownOnly) {
+    if (!crownOnly) {
+    // kraft-paper trunk (rolled tube)
+    for (let i = 0; i < 10; i++) {
+      const a0 = i / 10 * TAU + rot, a1 = (i + 1) / 10 * TAU + rot, r = 0.05;
+      const p0 = [Math.cos(a0) * r, -0.95, Math.sin(a0) * r], p1 = [Math.cos(a1) * r, -0.95, Math.sin(a1) * r];
+      const q0 = [p0[0], -0.62, p0[2]], q1 = [p1[0], -0.62, p1[2]], c = [0, -0.8, 0];
+      tri(p0, p1, q1, c, KRAFT, KRAFT, [0, 0], [1, 0], [1, 1], 2); tri(p0, q1, q0, c, KRAFT, KRAFT, [0, 0], [1, 1], [0, 1], 2);
+    }
+    // masu box as the pot
+    const y0 = -1.16, y1 = -0.9, a = 0.25, b = 0.29, ctr = [0, -1.0, 0];
+    const corners = k => { const ang = rot * 0.999 + k * Math.PI / 2 + Math.PI / 4; return [Math.cos(ang), Math.sin(ang)]; };
+    for (let k = 0; k < 4; k++) {
+      const [c0x, c0z] = corners(k), [c1x, c1z] = corners(k + 1), R0 = a * Math.SQRT2, R1 = b * Math.SQRT2;
+      const p0 = [c0x * R0, y0, c0z * R0], p1 = [c1x * R0, y0, c1z * R0], q0 = [c0x * R1, y1, c0z * R1], q1 = [c1x * R1, y1, c1z * R1];
+      tri(p0, p1, q1, ctr, CORAL, CREAM, [0, 0], [1, 0], [1, 1], 2); tri(p0, q1, q0, ctr, CORAL, CREAM, [0, 0], [1, 1], [0, 1], 2);
+      tri(q0, q1, [0, y1 - 0.01, 0], [0, -2, 0], hex('#b8403a'), CREAM, [0, 0], [1, 0], [0.5, 0.5], 2);
+    }
+    }
+    // crown: faceted gold-foil star
+    if (crownOnly && starK > 0.001) {
+      const yc = 0.97 + (reduce ? 0 : Math.sin(T * 1.1) * 0.012), sa = reduce ? 0.2 : Math.sin(T * 0.55) * 0.35, k = starK;
+      const pts = [];
+      for (let i = 0; i < 10; i++) { const ang = Math.PI / 2 + i * Math.PI / 5, rr = (i % 2 ? 0.055 : 0.13) * k; pts.push(rotYp([Math.cos(ang) * rr, yc + Math.sin(ang) * rr, 0], sa)); }
+      const f = rotYp([0, yc, 0.055 * k], sa), bk = rotYp([0, yc, -0.055 * k], sa), c = [0, yc, 0];
+      for (let i = 0; i < 10; i++) { const A = pts[i], B = pts[(i + 1) % 10]; tri(f, A, B, c, GOLD, GOLD, [0, 0], [1, 0], [0, 1], 1); tri(bk, B, A, c, GOLD, GOLD, [0, 0], [1, 0], [0, 1], 1); }
+    }
+  }
+
+  // ---------------- particles: paper snow and confetti ----------------
+  const MAXP = 800, pdata = new Float32Array(MAXP * 10);
+  const vbP = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbP); gl.bufferData(gl.ARRAY_BUFFER, pdata.byteLength, gl.DYNAMIC_DRAW);
+  const flakes = Array.from({ length: touchOnly ? 60 : 110 }, () => ({ x: Math.random(), y: Math.random(), z: 0.4 + Math.random() * 0.6, sp: Math.random() * TAU, fl: Math.random() * TAU, vs: 0.6 + Math.random() * 1.6, vf: 1 + Math.random() * 3 }));
+  const confetti = [];
+  const NLIGHT = touchOnly ? 42 : 56;
+  const CONF = [CORAL, GOLD, CREAM, hex('#f0b8a8'), GREENS[4]];
+  function burst(x, y) {
+    for (let i = 0; i < (touchOnly ? 70 : 110); i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = 250 + Math.random() * 520;
+      confetti.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, sp: Math.random() * TAU, fl: Math.random() * TAU, vs: (Math.random() - 0.5) * 8, vf: 4 + Math.random() * 8, c: CONF[i % 5], s: 7 + Math.random() * 7, life: 0, max: 2.2 + Math.random() * 1.4 });
+    }
+    while (confetti.length > 420) confetti.shift();
+  }
+
+  // ---------------- state & layout ----------------
+  let W, H, DPR, VP, CAM, rot = 0.4, T = 0, t0 = 0, last = 0, interacted = false;
+  const light = { x: 0.32, y: 0.26, tx: 0.32, ty: 0.26 };
+  let ribbonTop = 0;
+  function layout() {
+    W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, 2);
+    const rb = document.querySelector('.ribbon').getBoundingClientRect(); ribbonTop = rb.top - 22;
+    treeBuiltAt = -1;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); gl.viewport(0, 0, cv.width, cv.height);
+  }
+  function camera() {
+    const asp = W / H, fy = 32 * Math.PI / 180, t = Math.tan(fy / 2);
+    const dist = Math.max(1.42 / t, 0.94 / (t * asp));
+    CAM = [0, 0.55, dist];
+    VP = mul(persp(fy, asp, 0.1, 40), lookAt(CAM, [0, -0.15, 0]));
+    const potB = project([0, -1.2, 0])[1];
+    if (ribbonTop > 0 && potB > ribbonTop) { const k = ribbonTop / potB; VP = mul([k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, 0, 1 - k, 0, 1], VP); }
+  }
+  function project(p) {
+    const m = VP, x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+    const z = m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14];
+    return [(x / w * 0.5 + 0.5) * W, (1 - (y / w * 0.5 + 0.5)) * H, z / w];
+  }
+  const easeIO = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const backOut = t => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
+
+  const vbDyn = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbDyn); gl.bufferData(gl.ARRAY_BUFFER, 1400 * 15 * 4, gl.DYNAMIC_DRAW);
+  let treeNV = 0, treeBuiltAt = -1, wasAnimating = true;
+  const folds = [];                         // overlapping refold ripples merge instead of snapping
+  function buildTree(IT) {
+    nv = 0;
+    for (const l of leaves) {
+      const k = clamp01((IT - l.start) / 0.5), grow = k <= 0 ? 0 : backOut(k);
+      let fold = easeIO(clamp01((IT - l.start - 0.28) / 0.6));
+      for (const w of folds) {
+        const x = (T - w.t - Math.abs(l.h - w.h) * 0.9) / 1.15;
+        if (x > 0 && x < 1) fold *= 1 - Math.sin(Math.PI * x) * 0.92;
+      }
+      leaf(l, 0, grow, l.amax * fold);
+    }
+    staticParts(0, 0, T);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbM); gl.bufferSubData(gl.ARRAY_BUFFER, 0, vdata.subarray(0, nv * 15));
+    treeNV = nv;
+  }
+  function frame(dt) {
+    camera();
+    if (reduce) { light.x = light.tx; light.y = light.ty; }
+    else { light.x += (light.tx - light.x) * Math.min(1, dt * 4); light.y += (light.ty - light.y) * Math.min(1, dt * 4); }
+    const L = norm([(light.x - 0.5) * 2.6, 1.25 - light.y * 1.6, 1.1]);
+    const IT = reduce ? 99 : T;
+    for (let i = folds.length - 1; i >= 0; i--) if (T - folds[i].t > 3) folds.splice(i, 1);
+    const animating = IT < 3.6 || folds.length > 0;
+    if (animating || wasAnimating || treeBuiltAt < 0) { buildTree(IT); treeBuiltAt = T; }   // one more build after motion stops, even if frames were skipped
+    wasAnimating = animating;
+    // world-space pieces that move every frame: the crown and the cranes
+    nv = 0;
+    const starK = reduce ? 1 : clamp01((T - 2.45) / 0.6);
+    staticParts(0, starK > 0 ? backOut(starK) : 0, T, true);
+    if (reduce || T > 1.6) for (const c of cranes) {
+      if (!reduce) c.a += c.w * dt;
+      const e = reduce ? 1 : 1 - Math.pow(1 - clamp01((T - 1.6) / 1.8), 3);      // fly in along the orbit from far away
+      const keepR = c.r, keepY = c.y; c.r = keepR * (1 + 2.4 * (1 - e)); c.y = keepY + 0.9 * (1 - e); crane(c, T); c.r = keepR; c.y = keepY;
+    }
+    const dynNV = nv;
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbDyn); gl.bufferSubData(gl.ARRAY_BUFFER, 0, vdata.subarray(0, dynNV * 15));
+
+    // backdrop
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+    gl.useProgram(pBg);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbTri); gl.enableVertexAttribArray(aBg); gl.vertexAttribPointer(aBg, 2, gl.FLOAT, false, 0, 0);
+    const base = project([0, -1.16, 0]), side = project([0.6, -1.16, 0]);
+    const sh = project([-L[0] * 0.35, -1.16, -L[2] * 0.35]);
+    gl.uniform2f(uBg.uRes, W, H); gl.uniform1f(uBg.uDpr, DPR);
+    gl.uniform2f(uBg.uPool, W * (0.5 + (light.x - 0.5) * 0.7), H * (0.18 + light.y * 0.5));
+    gl.uniform2f(uBg.uShadow, sh[0], sh[1]); gl.uniform1f(uBg.uShR, Math.abs(side[0] - base[0]) * 1.05); gl.uniform1f(uBg.uFloor, base[1]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disableVertexAttribArray(aBg);
+
+    // paper
+    gl.enable(gl.DEPTH_TEST); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(pM);
+    gl.uniformMatrix4fv(uM.uVP, false, VP); gl.uniform3fv(uM.uL, L); gl.uniform3fv(uM.uCam, CAM);
+    const cr = Math.cos(-rot), sr = Math.sin(-rot);
+    for (const [vb, count, model] of [[vbM, treeNV, [cr, 0, -sr, 0, 0, 1, 0, 0, sr, 0, cr, 0, 0, 0, 0, 1]], [vbDyn, dynNV, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]]]) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+      aM.forEach((loc, i) => { gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 60, i * 12); });
+      gl.uniformMatrix4fv(uM.uModel, false, model);
+      gl.drawArrays(gl.TRIANGLES, 0, count);
+    }
+    aM.forEach(loc => gl.disableVertexAttribArray(loc));
+    gl.disable(gl.DEPTH_TEST);
+
+    // paper snow + confetti
+    let m = 0;
+    const put = (x, y, c, a, s, spin, flip, z = -0.999) => { if (m >= MAXP) return; const o = m * 10; pdata[o] = x; pdata[o + 1] = y; pdata[o + 2] = z; pdata[o + 3] = c[0]; pdata[o + 4] = c[1]; pdata[o + 5] = c[2]; pdata[o + 6] = a; pdata[o + 7] = s; pdata[o + 8] = spin; pdata[o + 9] = flip; m++; };
+    const vis = reduce ? 1 : clamp01((T - 0.8) / 1.5);
+    for (const f of flakes) {
+      if (!reduce) { f.y += dt * 0.035 * f.z; f.x += Math.sin(T * 0.7 + f.sp) * dt * 0.01; f.sp = (f.sp + dt * f.vs * 0.4) % TAU; f.fl = (f.fl + dt * f.vf) % TAU; if (f.y > 1.03) { f.y = -0.03; f.x = Math.random(); } }
+      put(f.x * W, f.y * H, CREAM, 0.85 * vis * (0.5 + 0.5 * f.z), 4 + f.z * 6, f.sp, f.fl);
+    }
+    for (let i = confetti.length - 1; i >= 0; i--) {
+      const p = confetti[i]; p.life += dt;
+      if (p.life > p.max || p.y > H + 30) { confetti.splice(i, 1); continue; }
+      p.vx *= Math.pow(0.35, dt); p.vy = p.vy * Math.pow(0.35, dt) + 420 * dt; p.vy = Math.min(p.vy, 140);
+      p.x += p.vx * dt + Math.sin(p.life * 3 + p.sp) * 20 * dt; p.y += p.vy * dt; p.sp = (p.sp + p.vs * dt) % TAU; p.fl = (p.fl + p.vf * dt) % TAU;
+      put(p.x, p.y, p.c, clamp01((p.max - p.life) / 0.5), p.s, p.sp, p.fl);
+    }
+    const mPaper = m;
+    // fairy lights wound around the tree; depth-tested so leaves in front hide them
+    if (reduce || T > 2.2) {
+      const on = reduce ? 1 : clamp01((T - 2.2) / 1.2);
+      for (let k = 0; k < NLIGHT; k++) {
+        const t = k / NLIGHT, y = -0.6 + t * 1.42, rr = (0.74 * (1 - (y + 0.68) / 1.5) + 0.1) * 0.86 + 0.03;
+        const a = t * 5.2 * TAU + rot, pr = project([Math.cos(a) * rr, y, Math.sin(a) * rr]);
+        if (on < t * 0.9) continue;
+        const tw = reduce ? 0.85 : 0.6 + 0.4 * Math.sin(T * 2.1 + k * 1.7);
+        put(pr[0], pr[1], k % 5 === 2 ? [1, 0.55, 0.45] : [1, 0.78, 0.42], tw * 1.2, 22, 0, 99, pr[2] - 0.002);
+      }
+      const sp = project([0, 0.97, 0]);
+      put(sp[0], sp[1], [1, 0.78, 0.4], 0.6 * (reduce ? 1 : clamp01((T - 2.6) / 0.8)), Math.min(W, H) * 0.2, 0, 99, -0.999);
+    }
+    gl.useProgram(pPt);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbP); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pdata.subarray(0, m * 10));
+    gl.enableVertexAttribArray(aPt[0]); gl.vertexAttribPointer(aPt[0], 3, gl.FLOAT, false, 40, 0);
+    gl.enableVertexAttribArray(aPt[1]); gl.vertexAttribPointer(aPt[1], 4, gl.FLOAT, false, 40, 12);
+    gl.enableVertexAttribArray(aPt[2]); gl.vertexAttribPointer(aPt[2], 3, gl.FLOAT, false, 40, 28);
+    gl.uniform2f(uPt.uPx, W, H); gl.uniform1f(uPt.uDpr, DPR);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    if (m > mPaper) gl.drawArrays(gl.POINTS, mPaper, m - mPaper);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(true);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.POINTS, 0, mPaper);
+    aPt.forEach(l => gl.disableVertexAttribArray(l));
+    gl.disable(gl.BLEND);
+  }
+
+  // ---------------- interaction ----------------
+  let downX = 0, downY = 0, downT = 0, pressing = false;
+  cv.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse' || pressing) { light.tx = e.clientX / W; light.ty = e.clientY / H; if (reduce) frame(0); }
+  });
+  cv.addEventListener('pointerdown', e => {
+    pressing = true; downX = e.clientX; downY = e.clientY; downT = performance.now();
+    if (e.pointerType !== 'mouse') { light.tx = e.clientX / W; light.ty = e.clientY / H; }
+    if (!interacted) { interacted = true; hint.classList.remove('on'); }
+  });
+  cv.addEventListener('pointerup', e => {
+    pressing = false;
+    const still = Math.hypot(e.clientX - downX, e.clientY - downY) < 8 && performance.now() - downT < 500;
+    if (still && !reduce && T > 3) {
+      const top = project([0, 1.0, 0])[1], bot = project([0, -0.9, 0])[1];
+      folds.push({ t: T, h: clamp01((bot - e.clientY) / (bot - top)) }); if (folds.length > 4) folds.shift();
+      burst(e.clientX, e.clientY);
+    }
+    if (reduce) frame(0);
+  });
+  cv.addEventListener('pointercancel', () => { pressing = false; });
+  cv.addEventListener('keydown', e => {
+    const step = 0.08;
+    if (e.key === 'ArrowLeft') light.tx = clamp01(light.tx - step); else if (e.key === 'ArrowRight') light.tx = clamp01(light.tx + step);
+    else if (e.key === 'ArrowUp') light.ty = clamp01(light.ty - step); else if (e.key === 'ArrowDown') light.ty = clamp01(light.ty + step);
+    else if ((e.key === 'Enter' || e.key === ' ') && !reduce && T > 3) { folds.push({ t: T, h: 0.5 }); burst(W / 2, H * 0.5); }
+    else return;
+    e.preventDefault(); if (!interacted) { interacted = true; hint.classList.remove('on'); }
+    if (reduce) frame(0);
+  });
+
+  function loop() {
+    const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
+    if (!t0) t0 = t; T = t - t0 + 0.016;
+    rot += dt * 0.16;
+    frame(dt);
+    if (T > 3.1 && !document.body.classList.contains('ready')) document.body.classList.add('ready');
+    if (T > 4.4 && !interacted && !hint.dataset.done) { hint.dataset.done = 1; hint.classList.add('on'); setTimeout(() => hint.classList.remove('on'), 6000); }
+    requestAnimationFrame(loop);
+  }
+  addEventListener('resize', () => { layout(); if (reduce) frame(0); });
+  layout();
+  if (reduce) { T = 8; frame(0); document.body.classList.add('ready'); hint.textContent = touchOnly ? '手指拖动挪动灯光' : '移动指针挪动灯光'; hint.classList.add('on'); }
+  else requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
