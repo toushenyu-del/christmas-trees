@@ -41,7 +41,7 @@
   .rays { position: fixed; pointer-events: none; opacity: 0; will-change: transform; animation: spin 180s linear infinite; }
   .rays.r2 { animation-duration: 105s; animation-direction: reverse; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .scrim { position: fixed; left: 0; right: 0; bottom: 0; height: 22vh; pointer-events: none; background: linear-gradient(to top, rgba(3,3,11,.62), rgba(3,3,11,0)); }
+  .scrim { position: fixed; left: 0; right: 0; bottom: 0; height: 22vh; pointer-events: none; background: linear-gradient(to top, rgba(3,3,11,.42), rgba(3,3,11,0)); }
   @media (prefers-reduced-motion: reduce) {
     .sign, .ready .sign { transition: none; opacity: 1; transform: none; filter: none; animation: none; background-position: 50% 0; }
     .hint { transition: none; }
@@ -97,7 +97,7 @@
 <canvas id="gl" aria-hidden="true"></canvas>
 <canvas class="rays" id="r1" aria-hidden="true"></canvas>
 <canvas class="rays r2" id="r2" aria-hidden="true"></canvas>
-<canvas id="ov" tabindex="0" role="img" aria-label="由上万颗金色光点组成的圣诞树。拖动可旋转，指针划过光点会散开，点击绽放火花，双击整棵树散成星系再重新凝聚"></canvas>
+<canvas id="ov" tabindex="0" role="img" aria-label="冬夜的冰湖上，一棵由上万颗金色光点和厚涂笔触组成的圣诞树，树下堆着礼物，远处是雪山、松林和亮着灯的小木屋，月亮挂在天上，雪在飘。拖动可旋转，指针划过光点会散开，点击绽放火花，双击整棵树散成星系再重新凝聚"></canvas>
 <div class="scrim" aria-hidden="true"></div>
 <p class="hint" id="hint"></p>
 <p class="sign">Merry Christmas</p>
@@ -134,16 +134,21 @@
   }
   const HP = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
   const VS_Q = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+  // the scene behind the tree: a brushed night sky with a moon, far mountains and a snowy treeline with cabins,
+  // and a frozen lake that reflects them
   const FS_SKY = HP + `
-uniform vec2 uRes, uC, uStar; uniform float uS, uScale, uT, uTw, uFloor, uStarOn;
+uniform vec2 uRes, uC, uStar, uMoon; uniform float uS, uScale, uT, uTw, uFloor, uStarOn, uHor, uWarm;
+uniform vec4 uShoot, uCab;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float h11(float n){ return fract(sin(n * 91.345 + 7.13) * 43758.5453); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
 float vnp(vec2 p, float per){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); float x0 = mod(i.x, per), x1 = mod(i.x + 1.0, per);
   return mix(mix(h21(vec2(x0, i.y)), h21(vec2(x1, i.y)), f.x), mix(h21(vec2(x0, i.y + 1.0)), h21(vec2(x1, i.y + 1.0)), f.x), f.y); }
 float tone(float n){ float b = floor(n * 5.0); return (b + smoothstep(0.32, 0.68, fract(n * 5.0))) / 5.0; }   // paint goes on in steps, not gradients
-void main(){
-  vec2 fc = gl_FragCoord.xy / uScale; fc.y = uRes.y - fc.y;
+float ridge(float x){ float s = 0.0, a = 0.55, f = 1.0; for (int i = 0; i < 4; i++) { float n = vn(vec2(x * f, 3.7 + float(i) * 11.0)); s += a * (1.0 - abs(2.0 * n - 1.0)); f *= 2.2; a *= 0.5; } return s; }
+// the night's base colour (also what the ice reflects)
+vec3 skyBase(vec2 fc){
   float m = max(uRes.x, uRes.y);
   float d = length((fc - uC + vec2(0.0, uS * 0.1)) / m);
   vec3 col = mix(vec3(0.075, 0.062, 0.19), vec3(0.025, 0.024, 0.075), smoothstep(0.0, 0.45, d));
@@ -151,40 +156,272 @@ void main(){
   vec2 n1 = (fc - uC - vec2(-uS * 0.75 + sin(uT * 0.05) * 30.0, -uS * 0.35)) / (uS * 0.7);
   vec2 n2 = (fc - uC - vec2(uS * 0.8, -uS * 0.05 + cos(uT * 0.04) * 24.0)) / (uS * 0.62);
   col += vec3(0.16, 0.06, 0.24) * exp(-dot(n1, n1)) * 0.55 + vec3(0.03, 0.12, 0.17) * exp(-dot(n2, n2)) * 0.5;
-  // brushwork: rings of paint swirling round the crown, a halo of strokes round the tree, slow waves elsewhere
-  vec2 ds = fc - uStar; float rs = length(ds) / uS;
-  float as = atan(ds.y, ds.x) / 6.2831853 + 0.5 + uT * 0.012 / (rs + 0.3);
-  float sS = vnp(vec2(as * 30.0, rs * uS / 9.0), 30.0) * 0.7 + vnp(vec2(as * 60.0, rs * uS / 5.0 + 3.1), 60.0) * 0.3;
-  vec2 dt = (fc - vec2(uC.x, uC.y + uS * 0.06)) * vec2(1.0, 1.15);
-  float wob = vn(fc / (uS * 0.22) + 2.7) - 0.5;
-  float rt = length(dt) / uS + wob * 0.1;
-  float at = atan(dt.y, dt.x) / 6.2831853 + 0.5 - uT * 0.004 + wob * 0.03;
-  float sTr = vnp(vec2(at * 52.0, rt * uS / 11.0), 52.0) * 0.7 + vnp(vec2(at * 104.0, rt * uS / 6.0 + 5.3), 104.0) * 0.3;
-  vec2 wq = vec2(fc.x + sin(fc.y / uS * 4.0 + uT * 0.06) * uS * 0.06, fc.y + sin(fc.x / uS * 2.6 - uT * 0.04) * uS * 0.035) / vec2(uS * 0.09, uS * 0.018);
-  float sW = vn(wq) * 0.7 + vn(wq * vec2(1.7, 2.1) + 9.2) * 0.3;
-  float wS = exp(-rs * rs * 9.0) * (0.3 + 0.7 * uStarOn), wT = exp(-pow((rt - 0.62) / 0.2, 2.0)) * 0.7, wW = 0.5;
-  float st = tone((sS * wS + sTr * wT + sW * wW) / (wS + wT + wW));
-  vec3 tint = mix(vec3(0.8, 0.92, 1.28), vec3(1.22, 0.86, 1.04), smoothstep(0.32, 0.68, vn(wq * 0.22 + 4.0)));
-  col *= mix(0.78, 1.24, st) * mix(vec3(1.0), tint, 0.5);
-  col += vec3(1.0, 0.74, 0.38) * exp(-rs * 4.6) * (0.04 + 0.2 * tone(sS)) * uStarOn;               // thick gold rings of light round the crown
-  col += vec3(0.95, 0.58, 0.32) * exp(-pow((rt - 0.48) / 0.3, 2.0)) * 0.05 * tone(sTr);            // warm aura round the tree
-  // glossy floor laid in long horizontal strokes, with a warm pool of light
-  float fl = smoothstep(uFloor - 2.0, uFloor + 6.0, fc.y);
-  float sF = tone(vn(vec2(fc.x / (uS * 0.15), fc.y / (uS * 0.012))) * 0.75 + vn(vec2(fc.x / (uS * 0.05), fc.y / (uS * 0.007) + 3.0)) * 0.25);
-  col = mix(col, (col * 0.55 + vec3(0.01, 0.008, 0.02)) * mix(0.7, 1.3, sF), fl);
-  vec2 q = (fc - vec2(uC.x, uFloor + uS * 0.03)) / vec2(uS * 0.75, uS * 0.09);
-  col += vec3(1.0, 0.68, 0.36) * exp(-dot(q, q)) * 0.1 * mix(0.6, 1.4, sF);
-  col += vec3(1.0, 0.8, 0.55) * exp(-abs(fc.y - uFloor) * 0.22) * exp(-pow((fc.x - uC.x) / (uS * 0.9), 2.0)) * 0.05;
-  // stars dabbed on with the tip of the brush
-  vec2 cell = floor(fc / 7.0), f = fract(fc / 7.0);
-  float r = h21(cell);
-  if (r > 0.986 && fc.y < uFloor) {
-    vec2 sp = vec2(h21(cell + 7.1), h21(cell + 3.7)) * 0.6 + 0.2;
-    float b = (r - 0.986) / 0.014;
-    float tw = mix(1.0, 0.6 + 0.4 * sin(uT * (1.0 + b * 3.0) + r * 60.0), uTw);
-    col += vec3(0.95, 0.92, 0.85) * (1.0 - smoothstep(0.16, 0.3, length(f - sp))) * (0.2 + 0.55 * b * b) * tw;
+  col += vec3(0.06, 0.055, 0.13) * exp(-abs(uHor - fc.y) / (uS * 0.22));          // snow light low on the horizon
+  return col;
+}
+// a row of pines on the far shore; lit = the moonlit (left) side of a tier
+float pines(vec2 p, float cw, float h0, float h1, float seed, out float lit){
+  lit = 0.0; float cov = 0.0, ci = floor(p.x / cw);
+  for (int k = -1; k <= 1; k++) {
+    float c = ci + float(k), r1 = h11(c * 1.37 + seed), r2 = h11(c * 2.91 + seed * 3.0), dens = vn(vec2(c * 0.13, seed * 7.0));
+    if (r1 < 0.05 + 0.5 * (1.0 - dens)) continue;                                 // clearings where the forest thins
+    float xc = (c + 0.5 + (r2 - 0.5) * 0.7) * cw, ht = mix(h0, h1, r1 * r1) * (0.5 + 0.75 * dens) * uS, ya = uHor - p.y + 1.0;
+    if (ya < 0.0 || ya > ht) continue;
+    float f = ya / ht, tier = fract(f * 4.0 + r2 * 3.0), hw = (1.0 - f) * ht * 0.34 * (0.68 + 0.32 * tier) + 0.7, dx = p.x - xc;
+    if (abs(dx) < hw) { cov = 1.0; lit = max(lit, step(dx, -hw * 0.1) * step(0.3, tier) * step(f, 0.93)); }
   }
+  return cov;
+}
+// mountains, hills and the treeline, above the horizon
+vec4 land(vec2 p){
+  float u = (p.x - uC.x) / uS, v = (uHor - p.y) / uS;
+  if (v < -0.003) return vec4(0.0);
+  vec4 o = vec4(0.0);
+  float rx = p.x / uS * 2.4 + 2.0, rg = ridge(rx);
+  float uu = (p.x - uC.x) / (uRes.x * 0.5);                                        // -1 .. 1 across the screen: peaks rise toward the edges
+  float hM = (0.022 + 0.21 * pow(max(rg - 0.22, 0.0), 1.4)) * (0.35 + 0.85 * smoothstep(0.2, 1.0, abs(uu))) * (uRes.x < uRes.y ? 1.25 : 1.0);
+  if (v < hM) {
+    float k = v / hM, lit = step(0.0, ridge(rx + 0.008) - ridge(rx - 0.008));      // 1: the slope faces the moon
+    float st = tone(vn(vec2((p.x + p.y * 0.9) / (uS * 0.016), (p.y - p.x * 0.9) / (uS * 0.05))));   // strokes laid down the slopes
+    vec3 rock = mix(vec3(0.07, 0.07, 0.18), vec3(0.12, 0.115, 0.28), k) * mix(0.82, 1.12, lit) * (0.88 + 0.24 * st);
+    float sn = smoothstep(0.6, 0.7, k + (vn(vec2(p.x / (uS * 0.006), p.y / (uS * 0.03))) - 0.5) * 0.4);   // snow, streaking down the gullies
+    vec3 snowc = mix(vec3(0.2, 0.21, 0.42), vec3(0.46, 0.48, 0.76), lit) * (0.86 + 0.26 * st);
+    o = vec4(mix(rock, snowc, sn), 1.0);
+  }
+  float hH = 0.016 + 0.045 * vn(vec2(p.x / uS * 2.3 + 9.0, 4.2)) + 0.02 * vn(vec2(p.x / uS * 7.0, 1.3));
+  if (v < hH) o = vec4(mix(vec3(0.05, 0.05, 0.14), vec3(0.09, 0.085, 0.21), v / hH) * (0.9 + 0.2 * tone(vn(vec2(p.x / (uS * 0.03), p.y / (uS * 0.01))))), 1.0);
+  float lit;
+  if (pines(p, uS * 0.016, 0.016, 0.042, 3.0, lit) > 0.5) o = vec4(mix(vec3(0.075, 0.08, 0.19), vec3(0.32, 0.34, 0.58), lit * 0.8), 1.0);
+  if (pines(p, uS * 0.025, 0.024, 0.07, 11.0, lit) > 0.5) o = vec4(mix(vec3(0.035, 0.04, 0.1), vec3(0.38, 0.4, 0.66), lit * 0.85), 1.0);
+  return o;
+}
+// a cabin on the far shore: warm windows, snow on the roof, a chimney
+vec4 cabin(vec2 p, float cx, float seed, inout vec3 glow){
+  if (cx < -999.0) return vec4(0.0);
+  float bw = uS * 0.05, bh = uS * 0.028, rh = uS * 0.024, fl = 0.82 + 0.18 * sin(uT * 2.3 + seed * 7.0) * sin(uT * 1.3 + seed * 3.0);
+  vec2 q = vec2(p.x - cx, uHor + uS * 0.004 - p.y);
+  glow += vec3(1.0, 0.6, 0.26) * exp(-length(q - vec2(0.0, bh * 0.45)) / (uS * 0.03)) * 0.2 * fl;
+  vec4 o = vec4(0.0);
+  if (q.y > 0.0 && q.y < bh && abs(q.x) < bw * 0.5) {
+    vec3 c = vec3(0.13, 0.085, 0.12) * (0.85 + 0.3 * tone(vn(vec2(p.x / 2.5, p.y / 8.0))));
+    vec2 w1 = q - vec2(-bw * 0.2, bh * 0.45), w2 = q - vec2(bw * 0.2, bh * 0.45);
+    if (max(abs(w1.x), abs(w1.y)) < bw * 0.1 || max(abs(w2.x), abs(w2.y)) < bw * 0.1) c = vec3(1.0, 0.72, 0.36) * 1.45 * fl;
+    o = vec4(c, 1.0);
+  }
+  float ry = q.y - bh;
+  if (ry >= 0.0 && ry < rh && abs(q.x) < bw * 0.62 * (1.0 - ry / rh)) o = vec4(mix(vec3(0.5, 0.5, 0.78), vec3(0.84, 0.84, 1.0), step(q.x, 0.0)), 1.0);
+  vec2 ch = q - vec2(bw * 0.24, bh + rh * 0.55);
+  if (abs(ch.x) < bw * 0.065 && ch.y > -rh * 0.3 && ch.y < rh * 0.28) o = vec4(0.1, 0.07, 0.1, 1.0);
+  return o;
+}
+float smoke(vec2 p, float cx, float seed){
+  if (cx < -999.0) return 0.0;
+  float bw = uS * 0.05, bh = uS * 0.028, rh = uS * 0.024;
+  vec2 top = vec2(cx + bw * 0.24, uHor + uS * 0.004 - bh - rh * 0.85);
+  float up = top.y - p.y, L = uS * 0.18;
+  if (up < 0.0 || up > L) return 0.0;
+  float xc = top.x + up * 0.4 + sin(up * 0.05 - uT * 1.1 + seed) * up * 0.14, wdt = 1.6 + up * 0.1;
+  return (1.0 - smoothstep(wdt * 0.5, wdt, abs(p.x - xc))) * (1.0 - up / L) * smoothstep(0.0, 6.0, up) * (0.45 + 0.55 * vn(vec2(p.x / 5.0, p.y / 8.0 + uT * 0.7)));
+}
+void main(){
+  vec2 fc = gl_FragCoord.xy / uScale; fc.y = uRes.y - fc.y;
+  vec3 col = skyBase(fc);
+  vec3 glow = vec3(0.0);
+  float sF = 0.0, snowM = 0.0;
+  if (fc.y <= uHor + 1.0) {
+    // brushwork: rings of paint swirling round the crown, a halo of strokes round the tree, slow waves elsewhere
+    vec2 ds = fc - uStar; float rs = length(ds) / uS;
+    float as = atan(ds.y, ds.x) / 6.2831853 + 0.5 + uT * 0.012 / (rs + 0.3);
+    float sS = vnp(vec2(as * 30.0, rs * uS / 9.0), 30.0) * 0.7 + vnp(vec2(as * 60.0, rs * uS / 5.0 + 3.1), 60.0) * 0.3;
+    vec2 dt = (fc - vec2(uC.x, uC.y + uS * 0.06)) * vec2(1.0, 1.15);
+    float wob = vn(fc / (uS * 0.22) + 2.7) - 0.5, rt = length(dt) / uS + wob * 0.1;
+    float at = atan(dt.y, dt.x) / 6.2831853 + 0.5 - uT * 0.004 + wob * 0.03;
+    float sTr = vnp(vec2(at * 52.0, rt * uS / 11.0), 52.0) * 0.7 + vnp(vec2(at * 104.0, rt * uS / 6.0 + 5.3), 104.0) * 0.3;
+    vec2 wq = vec2(fc.x + sin(fc.y / uS * 4.0 + uT * 0.06) * uS * 0.06, fc.y + sin(fc.x / uS * 2.6 - uT * 0.04) * uS * 0.035) / vec2(uS * 0.09, uS * 0.018);
+    float sW = vn(wq) * 0.7 + vn(wq * vec2(1.7, 2.1) + 9.2) * 0.3;
+    float wS = exp(-rs * rs * 9.0) * (0.3 + 0.7 * uStarOn), wT = exp(-pow((rt - 0.62) / 0.2, 2.0)) * 0.7, wW = 0.5;
+    float st = tone((sS * wS + sTr * wT + sW * wW) / (wS + wT + wW));
+    vec3 tint = mix(vec3(0.8, 0.92, 1.28), vec3(1.22, 0.86, 1.04), smoothstep(0.32, 0.68, vn(wq * 0.22 + 4.0)));
+    col *= mix(0.78, 1.24, st) * mix(vec3(1.0), tint, 0.5);
+    col += vec3(1.0, 0.74, 0.38) * exp(-rs * 4.6) * (0.04 + 0.2 * tone(sS)) * uStarOn;
+    col += vec3(0.95, 0.58, 0.32) * exp(-pow((rt - 0.48) / 0.3, 2.0)) * 0.05 * tone(sTr);
+    // the moon, painted, inside rings of light
+    vec2 dm = fc - uMoon; float rm = length(dm), R = uS * 0.058;
+    float am = atan(dm.y, dm.x) / 6.2831853 + 0.5 + uT * 0.005;
+    float ring = tone(vnp(vec2(am * 24.0, rm / (uS * 0.013)), 24.0));
+    col += vec3(0.92, 0.88, 0.74) * exp(-max(rm - R, 0.0) / (R * 1.5)) * (0.05 + 0.16 * ring);
+    if (rm < R * 1.03) {
+      float cr = vn(dm / R * 2.2 + 5.0) * 0.6 + vn(dm / R * 5.0 + 1.0) * 0.4;
+      vec3 mc = vec3(1.0, 0.95, 0.8) * (0.86 + 0.16 * tone(vn(vec2(dm.x / (R * 0.12), dm.y / (R * 0.5))))) - vec3(0.1, 0.11, 0.08) * smoothstep(0.55, 0.68, cr);
+      col = mix(col, mc, 1.0 - smoothstep(R * 0.94, R * 1.03, rm + (vn(dm / R * 4.0) - 0.5) * R * 0.05));
+    }
+    // thin clouds drifting across the upper sky, brushed in long strokes, edges lit by the moon
+    vec2 cq = vec2((fc.x - uT * uS * 0.006) / (uS * 0.55), fc.y / (uS * 0.11));
+    float cd = vn(cq) * 0.6 + vn(cq * vec2(2.1, 2.7) + 3.3) * 0.28 + vn(cq * vec2(5.2, 6.1) + 8.1) * 0.12;
+    float band = exp(-pow((fc.y - uRes.y * 0.2) / (uRes.y * 0.13), 2.0)) + 0.7 * exp(-pow((fc.y - uRes.y * 0.43) / (uRes.y * 0.08), 2.0));
+    float cl = smoothstep(0.5, 0.68, cd * (0.55 + 0.6 * band));
+    float moonLit = exp(-length(fc - uMoon) / (uS * 0.9));
+    vec3 cloudC = mix(vec3(0.1, 0.09, 0.22), vec3(0.34, 0.32, 0.52), clamp(moonLit * 1.4 + 0.2 * tone(cd), 0.0, 1.0));
+    float cStroke = tone(vn(vec2(fc.x / (uS * 0.12), fc.y / (uS * 0.008))));
+    col = mix(col, cloudC * (0.85 + 0.3 * cStroke) + vec3(0.9, 0.85, 0.7) * moonLit * smoothstep(0.55, 0.62, cd * (0.55 + 0.6 * band)) * (1.0 - cl) * 0.6, cl * 0.62 * (1.0 - smoothstep(R * 0.9, R * 1.1, -rm + R * 2.0) * 0.0));
+    // stars dabbed on with the tip of the brush
+    vec2 cell = floor(fc / 7.0), f = fract(fc / 7.0);
+    float r = h21(cell);
+    if (r > 0.986 && rm > R * 1.6 && cl < 0.4) {
+      vec2 sp = vec2(h21(cell + 7.1), h21(cell + 3.7)) * 0.6 + 0.2;
+      float b = (r - 0.986) / 0.014, tw = mix(1.0, 0.6 + 0.4 * sin(uT * (1.0 + b * 3.0) + r * 60.0), uTw);
+      col += vec3(0.95, 0.92, 0.85) * (1.0 - smoothstep(0.16, 0.3, length(f - sp))) * (0.2 + 0.55 * b * b) * tw;
+    }
+    // a shooting star now and then
+    if (uShoot.z >= 0.0 && uShoot.z < 1.3) {
+      vec2 dir = vec2(cos(uShoot.w), sin(uShoot.w)), head = uShoot.xy + dir * uShoot.z * uS * 1.2, rel = fc - head;
+      float al = dot(rel, -dir), ac = abs(dot(rel, vec2(-dir.y, dir.x))), Ls = uS * 0.26;
+      if (al > -2.0 && al < Ls) col += vec3(1.0, 0.92, 0.76) * exp(-ac / 1.1) * (1.0 - clamp(al, 0.0, Ls) / Ls) * sin(clamp(uShoot.z / 1.3, 0.0, 1.0) * 3.14159) * 1.1;
+    }
+    // chimney smoke, then the land itself
+    float sm = smoke(fc, uCab.x, 1.0) + smoke(fc, uCab.y, 2.0) + smoke(fc, uCab.z, 3.0) + smoke(fc, uCab.w, 4.0);
+    col = mix(col, vec3(0.42, 0.4, 0.58), clamp(sm, 0.0, 1.0) * 0.55);
+    vec4 L = land(fc), cb;
+    cb = cabin(fc, uCab.x, 1.0, glow); if (cb.a > 0.0) L = cb;
+    cb = cabin(fc, uCab.y, 2.0, glow); if (cb.a > 0.0) L = cb;
+    cb = cabin(fc, uCab.z, 3.0, glow); if (cb.a > 0.0) L = cb;
+    cb = cabin(fc, uCab.w, 4.0, glow); if (cb.a > 0.0) L = cb;
+    col = mix(col, L.rgb, L.a) + glow;
+  } else {
+    // the frozen lake: long horizontal strokes of ice reflecting shore, sky, moon and windows
+    float dz = clamp((fc.y - uHor) / max(uRes.y - uHor, 1.0), 0.0, 1.0);
+    float sh = vn(vec2(fc.x / (uS * 0.17), fc.y / (uS * 0.0065))) * 0.7 + vn(vec2(fc.x / (uS * 0.05), fc.y / (uS * 0.004) + 7.0)) * 0.3;
+    vec2 mp = vec2(fc.x + (sh - 0.5) * uS * 0.03, 2.0 * uHor - fc.y);
+    vec4 L = land(mp);
+    vec3 g2 = vec3(0.0); vec4 cb;
+    cb = cabin(mp, uCab.x, 1.0, g2); if (cb.a > 0.0) L = cb;
+    cb = cabin(mp, uCab.y, 2.0, g2); if (cb.a > 0.0) L = cb;
+    cb = cabin(mp, uCab.z, 3.0, g2); if (cb.a > 0.0) L = cb;
+    cb = cabin(mp, uCab.w, 4.0, g2); if (cb.a > 0.0) L = cb;
+    vec3 refl = mix(skyBase(mp), L.rgb, L.a);
+    col = refl * 0.46 * (0.8 + 0.4 * tone(sh)) + vec3(0.01, 0.012, 0.03) + g2 * 0.7;
+    float glade = exp(-pow((fc.x - uMoon.x) / (uS * (0.022 + 0.08 * dz)), 2.0)) * (0.3 + 0.7 * tone(sh)) * (1.0 - dz * 0.4);
+    col += vec3(0.86, 0.82, 0.66) * glade * 0.17;
+    // snow drifted over the ice, deeper toward the near shore and the corners
+    float side = abs(fc.x - uC.x) / (uRes.x * 0.5);
+    float n = vn(vec2(fc.x / (uS * 0.3), fc.y / (uS * 0.035))) * 0.65 + vn(vec2(fc.x / (uS * 0.09), fc.y / (uS * 0.015))) * 0.35;
+    float shore = exp(-(fc.y - uHor) / (uS * 0.04));
+    snowM = smoothstep(0.0, 0.08, n * 0.7 + side * side * 0.55 + shore * 0.4 + dz * (uRes.x < uRes.y ? 0.3 : 0.06) - 0.66);
+    float sT = tone(vn(vec2(fc.x / (uS * 0.05), fc.y / (uS * 0.011))) * 0.75 + vn(vec2(fc.x / (uS * 0.014), fc.y / (uS * 0.006))) * 0.25);
+    vec3 snowC = mix(vec3(0.2, 0.21, 0.4), vec3(0.44, 0.46, 0.72), sT) * (0.82 + 0.25 * dz);
+    col = mix(col, snowC, snowM * 0.9);
+    // banks of snow in the near corners, rimmed with the tree's warm light
+    float bx = (fc.x - uC.x) / (uRes.x * 0.5), lim = uRes.x < uRes.y ? 0.3 : 0.46;
+    float bank = uRes.y * (uRes.x < uRes.y ? 0.13 : 0.12) * smoothstep(lim, 1.05, abs(bx)) * (0.78 + 0.44 * vn(vec2(fc.x / (uS * 0.14), 2.0)));
+    float top = uRes.y - bank;
+    if (bank > 1.0 && fc.y > top - 2.0) {
+      float k = clamp((fc.y - top) / max(bank, 1.0), 0.0, 1.0);
+      vec3 bc = mix(vec3(0.52, 0.52, 0.78), vec3(0.15, 0.16, 0.32), smoothstep(0.0, 0.85, k)) * (0.85 + 0.3 * tone(vn(vec2(fc.x / (uS * 0.03), fc.y / (uS * 0.012)))));
+      bc += vec3(1.0, 0.7, 0.42) * (1.0 - smoothstep(0.0, 0.1, k)) * 0.16 * uWarm;
+      col = mix(col, bc, smoothstep(top - 2.0, top + 1.5, fc.y));
+    }
+    sF = tone(sh);
+  }
+  // the tree's warm light on the ice and snow round its foot
+  vec2 qq = (fc - vec2(uC.x, uFloor + uS * 0.02)) / vec2(uS * 0.72, uS * 0.13);
+  float pool = exp(-dot(qq, qq));
+  col += vec3(1.0, 0.66, 0.34) * pool * (0.08 + 0.05 * sF + 0.22 * snowM) * uWarm;
+  col += vec3(1.0, 0.8, 0.55) * exp(-abs(fc.y - uFloor) * 0.2) * exp(-pow((fc.x - uC.x) / (uS * 0.8), 2.0)) * 0.04 * uWarm;
   gl_FragColor = vec4(col, 1.0);
+}`;
+  // painted after the tree: presents on the ice and a drift of snow round the trunk
+  const FS_FG = HP + `
+uniform vec2 uRes, uC; uniform float uS, uFloor, uT, uScale, uWarm;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+float tone(float n){ float b = floor(n * 5.0); return (b + smoothstep(0.32, 0.68, fract(n * 5.0))) / 5.0; }
+vec4 over(vec4 top, vec4 bot){ return top + bot * (1.0 - top.a); }
+// the faces of a present. sd = +1 shows the right face (a box left of the tree), -1 the left face
+vec4 faces(vec2 p, vec2 base, vec3 dim, float sd, vec3 box, vec3 rib, float seed, bool refl){
+  float w = dim.x, h = dim.y, dd = dim.z;
+  vec2 sk = vec2(dd * 0.55 * sd, -dd * 0.62), o0 = vec2(base.x - w * 0.5, base.y);
+  vec3 warm = vec3(1.0, 0.72, 0.42) * uWarm, cool = vec3(0.42, 0.46, 0.86);
+  float wob = (vn(p * 0.35 + seed * 13.0) - 0.5) * 1.2;
+  vec4 o = vec4(0.0);
+  // front face, backlit by the tree: darker, a warm rim along its top edge
+  float s = (p.x - o0.x + wob) / w, t = (o0.y - p.y) / h;
+  if (s > 0.0 && s < 1.0 && t > 0.0 && t < 1.0) {
+    float band = min(abs(s - 0.5) / 0.085, abs(t - 0.52) / 0.075);
+    vec3 c = band < 1.0 ? rib * (0.62 + 0.5 * (1.0 - band) * (1.0 - band)) : box * (0.5 + 0.12 * tone(vn(vec2(s * 9.0 + seed, t * 2.2)))) + cool * 0.05;
+    c += warm * 0.3 * smoothstep(0.86, 1.0, t);
+    o = vec4(c, 1.0);
+  }
+  // side face, turned toward the tree's light
+  vec2 so = sd > 0.0 ? o0 + vec2(w, 0.0) : o0;
+  float st = (p.x - so.x) / sk.x, sa = -(p.y - so.y - st * sk.y) / h;
+  if (st > 0.0 && st < 1.0 && sa > 0.0 && sa < 1.0) {
+    float band = min(abs(st - 0.5) / 0.1, abs(sa - 0.52) / 0.075);
+    vec3 c = band < 1.0 ? rib * (0.7 + 0.45 * (1.0 - band)) : box * (0.72 + 0.12 * tone(vn(vec2(st * 3.0 + seed, sa * 8.0)))) + warm * 0.16;
+    o = vec4(c, 1.0);
+  }
+  if (refl) return o;
+  // top face, catching the warm light from above
+  vec2 to = o0 + vec2(0.0, -h);
+  float tt = (p.y - to.y) / sk.y, ts = (p.x - to.x - tt * sk.x) / w;
+  if (tt > 0.0 && tt < 1.0 && ts > 0.0 && ts < 1.0) {
+    float band = min(abs(ts - 0.5) / 0.085, abs(tt - 0.5) / 0.1);
+    vec3 c = band < 1.0 ? rib * (0.85 + 0.45 * (1.0 - band)) + warm * 0.2 : box * (0.92 + 0.14 * tone(vn(vec2(ts * 2.5 + tt * 2.0 + seed, tt * 9.0)))) + warm * 0.3;
+    o = vec4(c, 1.0);
+  }
+  // the bow: two loops and a knot
+  vec2 bc = to + vec2(w * 0.5, 0.0) + sk * 0.5;
+  vec2 rl = vec2(w * 0.15, h * 0.16 + dd * 0.12);
+  for (int i = 0; i < 2; i++) {
+    float sg = i == 0 ? -1.0 : 1.0;
+    vec2 lc = bc + vec2(sg * w * 0.13, -rl.y * 0.62);
+    float e = length((p - lc) / rl);
+    if (e > 0.5 && e < 1.0) { float lit = clamp(0.6 - (p.y - lc.y) / rl.y * 0.5, 0.0, 1.0); o = vec4(rib * (0.55 + 0.6 * lit) + warm * 0.18 * lit, 1.0); }
+  }
+  if (length((p - bc - vec2(0.0, -rl.y * 0.25)) / (rl * vec2(0.4, 0.42))) < 1.0) o = vec4(rib * 1.05 + warm * 0.15, 1.0);
+  return o;
+}
+vec4 present(vec2 p, vec2 base, vec3 dim, float sd, vec3 box, vec3 rib, float seed){
+  vec4 o = vec4(0.0);
+  // contact shadow on the ice
+  vec2 sq = (p - vec2(base.x + dim.z * 0.27 * sd, base.y - dim.z * 0.15)) / vec2(dim.x * 0.62 + dim.z * 0.3, dim.z * 0.36);
+  float sh = exp(-dot(sq, sq) * 1.6) * 0.5;
+  o = vec4(0.0, 0.0, 0.0, sh);
+  if (p.y > base.y) {                                     // its reflection in the ice
+    vec2 pm = vec2(p.x + (vn(vec2(p.x / 30.0, p.y / 2.5)) - 0.5) * 4.0, 2.0 * base.y - p.y);
+    vec4 r = faces(pm, base, dim, sd, box, rib, seed, true);
+    float k = 0.3 * exp(-(p.y - base.y) / (dim.y * 0.8));
+    o = over(vec4(r.rgb * r.a * k, r.a * k), o);
+  }
+  vec4 f = faces(p, base, dim, sd, box, rib, seed, false);
+  return over(vec4(f.rgb * f.a, f.a), o);
+}
+// a drift of snow where the trunk meets the ice
+vec4 mound(vec2 p){
+  vec2 q = (p - vec2(uC.x, uFloor + uS * 0.012)) / vec2(uS * 0.16, uS * 0.052);
+  if (abs(q.x) > 1.0) return vec4(0.0);
+  float top = -sqrt(max(0.0, 1.0 - q.x * q.x)) * (1.0 + (vn(vec2(p.x / (uS * 0.025), 1.0)) - 0.5) * 0.3);
+  if (q.y < top - 0.05 || q.y > 0.35) return vec4(0.0);
+  float lit = clamp(-q.y / max(-top, 0.02), 0.0, 1.0);
+  vec3 c = mix(vec3(0.46, 0.47, 0.74), vec3(1.0, 0.88, 0.72), lit * 0.85 * uWarm + lit * 0.1);
+  c *= 0.84 + 0.26 * tone(vn(vec2(p.x / (uS * 0.022), p.y / (uS * 0.007))));
+  float a = smoothstep(top - 0.05, top + 0.05, q.y) * (1.0 - smoothstep(0.22, 0.35, q.y)) * (1.0 - smoothstep(0.82, 1.0, abs(q.x)));
+  return vec4(c * a, a);
+}
+void main(){
+  vec2 p = gl_FragCoord.xy / uScale; p.y = uRes.y - p.y;
+  vec2 d = (p - vec2(uC.x, uFloor)) / uS;
+  if (abs(d.x) > 0.4 || d.y < -0.22 || d.y > 0.32) discard;
+  float G = uS * 1.12;
+  vec4 o = vec4(0.0);
+  o = over(present(p, vec2(uC.x - 0.25 * uS, uFloor + 0.012 * uS), vec3(0.078, 0.058, 0.04) * G, 1.0, vec3(0.44, 0.15, 0.44), vec3(0.86, 0.86, 0.94), 1.0), o);
+  o = over(present(p, vec2(uC.x + 0.21 * uS, uFloor + 0.008 * uS), vec3(0.07, 0.1, 0.036) * G, -1.0, vec3(0.16, 0.25, 0.64), vec3(0.98, 0.76, 0.32), 2.0), o);
+  o = over(mound(p), o);
+  o = over(present(p, vec2(uC.x - 0.13 * uS, uFloor + 0.042 * uS), vec3(0.11, 0.085, 0.05) * G, 1.0, vec3(0.7, 0.1, 0.13), vec3(1.0, 0.8, 0.36), 3.0), o);
+  o = over(present(p, vec2(uC.x + 0.1 * uS, uFloor + 0.05 * uS), vec3(0.088, 0.062, 0.042) * G, -1.0, vec3(0.08, 0.42, 0.3), vec3(0.94, 0.94, 0.98), 4.0), o);
+  o = over(present(p, vec2(uC.x - 0.02 * uS, uFloor + 0.078 * uS), vec3(0.056, 0.04, 0.03) * G, 1.0, vec3(0.88, 0.62, 0.2), vec3(0.74, 0.1, 0.15), 5.0), o);
+  if (o.a < 0.003) discard;
+  gl_FragColor = o;
 }`;
   const FS_COPY = 'precision mediump float; uniform sampler2D uTex; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(uTex, vUv).rgb, 1.0); }';
   const VS_PT = `attribute vec2 aPos; attribute vec4 aCol; attribute vec4 aSt; attribute float aSeed;
@@ -226,13 +463,21 @@ void main(){
     gl_FragColor = vec4(c * a, a);
     return;
   }
+  if (mode > 4.5) {                                  // a falling snowflake: a soft dab of white paint
+    float soft = clamp(mode - 5.0, 0.0, 1.0), d = length(p);
+    float e = 0.8 + (h1(floor(atan(p.y, p.x) * 1.5) + seed * 17.0) - 0.5) * 0.12;
+    float a = (1.0 - smoothstep(e - 0.2 - soft * 0.55, e, d)) * vCol.a;
+    if (a < 0.004) discard;
+    gl_FragColor = vec4(vCol.rgb * (0.9 + 0.14 * (1.0 - d)) * a, a);
+    return;
+  }
   if (mode > 3.95) {                                 // an ornament: a round dab, lit from the upper left, with a thick white highlight
     float d = length(p);
     float edge = 0.88 + (h1(floor(atan(p.y, p.x) * 2.5) + seed * 37.0) - 0.5) * 0.1;
     float body = 1.0 - smoothstep(edge - 0.1, edge, d);
     if (body < 0.01) discard;
     float lam = clamp(0.55 - 0.5 * dot(p, vec2(0.7071)), 0.0, 1.0);
-    vec3 c = vCol.rgb * (0.3 + 0.9 * lam);
+    vec3 c = vCol.rgb * (0.55 + 0.95 * lam) + vec3(1.0, 0.75, 0.45) * 0.12;
     c += vCol.rgb * 0.35 * smoothstep(0.5, 0.85, d) * smoothstep(0.2, 0.7, dot(p, vec2(0.7071)));
     float hl = 1.0 - smoothstep(0.1, 0.24, length(p - vec2(-0.3, -0.34)));
     c = mix(c, vec3(1.0, 0.98, 0.93), hl * 0.92);
@@ -284,7 +529,8 @@ void main(){
 }`;
   if (gl) {
     try {
-      P.sky = prog(VS_Q, FS_SKY, ['uRes', 'uC', 'uStar', 'uS', 'uScale', 'uT', 'uTw', 'uFloor', 'uStarOn'], 'p');
+      P.sky = prog(VS_Q, FS_SKY, ['uRes', 'uC', 'uStar', 'uMoon', 'uS', 'uScale', 'uT', 'uTw', 'uFloor', 'uStarOn', 'uHor', 'uWarm', 'uShoot', 'uCab'], 'p');
+      P.fg = prog(VS_Q, FS_FG, ['uRes', 'uC', 'uS', 'uFloor', 'uT', 'uScale', 'uWarm'], 'p');
       P.copy = prog(VS_Q, FS_COPY, ['uTex'], 'p');
       P.pt = prog(VS_PT, FS_PT, ['uRes', 'uDpr', 'uMirror', 'uFloor', 'uFade'], 'aPos');
       P.post = prog(VS_Q, FS_POST, ['uTex', 'uTexel', 'uRelief', 'uT', 'uPx'], 'p');
@@ -319,11 +565,12 @@ void main(){
                : Math.round(Math.min(3200, Math.max(1800, area / (1440 * 900) * 3200)));
   const BOKEH = touchOnly ? 8 : 14, SNOW = gl ? (touchOnly ? 140 : 280) : 60, SPARKS = 420;
   // three layers, each a region of one buffer: strokes behind the axis, strokes in front, light on top
-  const FL = 11, CAP = N * 2 + BOKEH + SNOW + SPARKS + 96, RB = 0, RF = CAP, RL = CAP * 2;
-  const buf = new Float32Array(CAP * 3 * FL); // x y r g b a size mode dirx diry seed
-  let cB = 0, cF = 0, cL = 0, cLT = 0;
+  const FLAKES = gl ? (touchOnly ? 120 : 240) : 0;
+  const FL = 11, CAP = N * 2 + BOKEH + SNOW + SPARKS + FLAKES + 96, RB = 0, RF = CAP, RL = CAP * 2, RS = CAP * 3;
+  const buf = new Float32Array(CAP * 4 * FL); // x y r g b a size mode dirx diry seed
+  let cB = 0, cF = 0, cL = 0, cLT = 0, cS = 0;
   function emit(layer, x, y, r, g, b, a, s, mode, dx, dy, seed) {
-    const k = layer === 0 ? RB + cB++ : layer === 1 ? RF + cF++ : RL + cL++, o = k * FL;
+    const k = layer === 0 ? RB + cB++ : layer === 1 ? RF + cF++ : layer === 2 ? RL + cL++ : RS + cS++, o = k * FL;
     buf[o] = x; buf[o + 1] = y; buf[o + 2] = r; buf[o + 3] = g; buf[o + 4] = b; buf[o + 5] = a; buf[o + 6] = s; buf[o + 7] = mode; buf[o + 8] = dx; buf[o + 9] = dy; buf[o + 10] = seed;
   }
   function light(x, y, r, g, b, a, s, mode) {          // additive light: no stroke direction
@@ -401,7 +648,7 @@ void main(){
     }
     n++;
   };
-  const nStar = 380, nOrn = Math.round(N * 0.005) + 26, nRing = Math.round(N * 0.06), nRib = Math.round(N * 0.12);
+  const nStar = 380, nOrn = Math.round(N * 0.008) + 30, nRing = Math.round(N * 0.06), nRib = Math.round(N * 0.12);
   for (let k = 0; k < 2; k++) for (let j = 0; j < nRib; j++) {
     const h = 0.015 + rnd() * 0.94;   // ribbon particles store their height in y and flow upward later
     rib[n] = k;
@@ -454,11 +701,13 @@ void main(){
   const bk = Array.from({ length: BOKEH }, (_, j) => ({ x: rnd(), y: rnd() * 0.8, s: 0.05 + rnd() * 0.1, v: (rnd() - 0.5) * 0.008, c: [0, 2, 6, 4, 3][j % 5], a: 0.035 + rnd() * 0.045, p: rnd() * TAU }));
   const snow = Array.from({ length: SNOW }, () => ({ x: rnd(), y: rnd(), z: 0.25 + rnd() * 0.75, p: rnd() * TAU, c: rnd() < 0.8 ? 0 : 1 }));
   const sparks = []; // click bursts
+  const flakes = Array.from({ length: FLAKES }, () => ({ x: rnd(), y: rnd(), z: Math.pow(rnd(), 1.5), p: rnd() * TAU, s: 0.7 + rnd() * 0.6 }));
+  const BALL = [[.74, .1, .14], [.95, .7, .24], [.16, .32, .78], [.1, .5, .36], [.6, .18, .54], [.9, .9, .94]];   // painted baubles
 
   // ================= layout =================
   function buildRT() {
     freeRT(skyRT); freeRT(paintRT);
-    skyRT = makeRT(Math.max(2, Math.round(W * 0.5)), Math.max(2, Math.round(H * 0.5)));
+    skyRT = makeRT(Math.max(2, Math.round(W * 0.75 * q)), Math.max(2, Math.round(H * 0.75 * q))); skyFrame = 0;   // the sky drops resolution with the rest when frames run long
     paintRT = makeRT(Math.max(2, Math.round(glc.width * q)), Math.max(2, Math.round(glc.height * q)));
   }
   function resize() {
@@ -538,7 +787,7 @@ void main(){
   const backOut = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
   const WAVE_V = 900;
   const introDone = () => T - introStart > 4.6;
-  let starX = 0, starY = 0, starOn = 0, gS = 0;
+  let starX = 0, starY = 0, starOn = 0, gS = 0, shoot = null, nextShoot = 5 + Math.random() * 4, skyFrame = 0;
   const TRUNK_GLOW = [[-0.5, 0.2, 0.14], [-0.42, 0.16, 0.11], [-0.32, 0.14, 0.08]], CORE_GLOW = [[0.62, 0.62, 0.06], [0.36, 0.42, 0.05]];
 
   function render(dt) {
@@ -561,7 +810,7 @@ void main(){
     const fadeIn = reduce ? 1 : clamp01(T / 0.7) * 0.85 + 0.15;
     const dRib = CH / (4.2 * TAU);
     const cloudX = W < H ? 0.6 : 1, cloudY = W < H ? 1.2 : 1, keep = 1 - gS;   // portrait screens get a taller, narrower cloud
-    cB = cF = cL = 0;
+    cB = cF = cL = cS = 0;
     // underpainting: broad bark strokes so the trunk reads as one painted form under its light
     { const tk = (reduce ? 1 : clamp01((IT - 0.5) / 1.0) * (dissolving ? 1 - dis : 1)) * keep * keep;
       if (tk > 0.01) for (let k = 0; k < 30; k++) {
@@ -650,8 +899,8 @@ void main(){
       if (t === 2) {                                   // ornaments: a dab of paint with a thick white highlight, and a flare in front
         const pulse = reduce ? 0.9 : 0.5 + 0.5 * Math.pow(Math.sin(T * 1.6 + ph[j]), 2);
         const base = al[j] * (0.6 + 0.4 * e) / (1 + blur * 1.1) * fadeIn * stir;
-        const s = sz[j] * kp * unit * 5.6 * 0.42 * (1 + blur * 0.6);
-        emit(layer, sx, sy, C[0] * 0.9, C[1] * 0.9, C[2] * 0.9, Math.min(1, base * 1.05), s, 4, 1, 0, seed);
+        const s = sz[j] * kp * unit * 5.6 * 0.5 * (1 + blur * 0.6), BC = BALL[j % 6];
+        emit(layer, sx, sy, BC[0], BC[1], BC[2], Math.min(1, base * 1.1), s, 4, 1, 0, seed);
         if (blur < 0.35 && disp <= 6) light(sx, sy, C[0], C[1], C[2], Math.min(1, base * pulse * 1.15), sz[j] * kp * unit * 5.6 * 2.6, 2);
         else light(sx, sy, C[0], C[1], C[2], base * pulse * 0.5, sz[j] * kp * unit * 5.6 * (1 + blur * 1.4), blur);
         continue;
@@ -716,6 +965,14 @@ void main(){
       const C = PAL[p.c], twk = reduce ? 0.8 : 0.5 + 0.5 * Math.sin(T * (1.5 + p.z * 2) + p.p);
       light(p.x * W, p.y * H, C[0], C[1], C[2], (0.18 + 0.4 * p.z) * twk * (reduce ? 1 : clamp01(T / 1.5)), (2 + p.z * 4.5) * Math.min(1.4, S / 560), p.z < 0.45 ? 0.8 : 0.05);
     }
+    // falling snow, in depth: far flakes small and blue, near ones big, soft and lit warm near the tree
+    for (const f of flakes) {
+      if (!reduce) { f.y += dt * (0.012 + 0.05 * f.z); f.x += (Math.sin(T * 0.4 + f.p) * 0.006 + 0.002) * f.z * dt; if (f.y > 1.04) { f.y = -0.04; f.x = rnd(); } if (f.x > 1.03) f.x = -0.03; }
+      const fx = f.x * W, fy = f.y * H, z = f.z, near = Math.exp(-(((fx - CX) / S) ** 2 + ((fy - CY) / S) ** 2) * 3);
+      const r = 0.62 + 0.33 * z + 0.05 * near, g = 0.64 + 0.3 * z, b = 0.86 + 0.12 * z - 0.2 * near;
+      emit(3, fx, fy, r, g, Math.max(0.6, b), (0.22 + 0.58 * z) * (reduce ? 1 : clamp01(T / 2)), (1.3 + z * z * 9) * f.s * Math.min(1.3, S / 560), 5 + (z > 0.82 ? (z - 0.82) / 0.18 * 0.95 : 0), 1, 0, f.p);
+    }
+    if (!reduce && T > nextShoot) { shoot = { x: W * (0.06 + rnd() * 0.5), y: H * (0.05 + rnd() * 0.16), t: T, a: 0.32 + rnd() * 0.3 }; nextShoot = T + 9 + rnd() * 10; }
     // click sparks: ballistic, slowly fading, a few flaring
     for (let k = sparks.length - 1; k >= 0; k--) {
       const p = sparks[k]; p.life += dt;
@@ -738,12 +995,21 @@ void main(){
   function target(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fb : null); gl.viewport(0, 0, t ? t.w : glc.width, t ? t.h : glc.height); }
   function drawGL() {
     gl.disable(gl.BLEND);
-    // 1) the brushed sky, at half resolution
-    target(skyRT); gl.useProgram(P.sky.p); bindQuad();
-    const U = P.sky.u;
-    gl.uniform2f(U.uRes, W, H); gl.uniform2f(U.uC, CX, CY); gl.uniform2f(U.uStar, starX, starY); gl.uniform1f(U.uS, S);
-    gl.uniform1f(U.uScale, skyRT.w / W); gl.uniform1f(U.uT, T); gl.uniform1f(U.uTw, reduce ? 0 : 1); gl.uniform1f(U.uFloor, FLOOR); gl.uniform1f(U.uStarOn, starOn);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const portrait = W < H, HOR = FLOOR - S * (portrait ? 0.1 : 0.12), warm = 1 - gS * 0.45;
+    // 1) the brushed sky and the land, at 3/4 resolution; it moves slowly, so every other frame is enough
+    if (skyFrame++ % 2 === 0 || reduce) {
+      target(skyRT); gl.useProgram(P.sky.p); bindQuad();
+      const U = P.sky.u;
+      gl.uniform2f(U.uRes, W, H); gl.uniform2f(U.uC, CX, CY); gl.uniform2f(U.uStar, starX, starY); gl.uniform1f(U.uS, S);
+      gl.uniform2f(U.uMoon, W * (portrait ? 0.2 : 0.17), H * (portrait ? 0.16 : 0.19));
+      gl.uniform1f(U.uScale, skyRT.w / W); gl.uniform1f(U.uT, T); gl.uniform1f(U.uTw, reduce ? 0 : 1); gl.uniform1f(U.uFloor, FLOOR); gl.uniform1f(U.uStarOn, starOn);
+      gl.uniform1f(U.uHor, HOR); gl.uniform1f(U.uWarm, warm);
+      const sa = shoot && T - shoot.t < 1.3 ? shoot : null;
+      gl.uniform4f(U.uShoot, sa ? sa.x : 0, sa ? sa.y : 0, sa ? T - sa.t : -1, sa ? sa.a : 0);
+      const cab = f => { const x = W * f; return Math.abs(x - CX) < S * 0.36 ? -9999 : x; };     // cabins never hide behind the tree
+      gl.uniform4f(U.uCab, cab(0.07), cab(portrait ? 0.93 : 0.24), cab(portrait ? 2 : 0.78), cab(portrait ? 2 : 0.93));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
     // 2) lay it into the paint buffer
     target(paintRT); gl.useProgram(P.copy.p); bindQuad();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyRT.tex); gl.uniform1i(P.copy.u.uTex, 0);
@@ -754,6 +1020,7 @@ void main(){
     if (cB) gl.bufferSubData(gl.ARRAY_BUFFER, RB * FL * 4, buf.subarray(RB * FL, (RB + cB) * FL));
     if (cF) gl.bufferSubData(gl.ARRAY_BUFFER, RF * FL * 4, buf.subarray(RF * FL, (RF + cF) * FL));
     if (cL) gl.bufferSubData(gl.ARRAY_BUFFER, RL * FL * 4, buf.subarray(RL * FL, (RL + cL) * FL));
+    if (cS) gl.bufferSubData(gl.ARRAY_BUFFER, RS * FL * 4, buf.subarray(RS * FL, (RS + cS) * FL));
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, FL * 4, 0);
     gl.enableVertexAttribArray(P.aCol); gl.vertexAttribPointer(P.aCol, 4, gl.FLOAT, false, FL * 4, 8);
     gl.enableVertexAttribArray(P.aSt); gl.vertexAttribPointer(P.aSt, 4, gl.FLOAT, false, FL * 4, 24);
@@ -761,7 +1028,7 @@ void main(){
     const u = P.pt.u;
     gl.uniform2f(u.uRes, W, H); gl.uniform1f(u.uDpr, DPR * q); gl.uniform1f(u.uFloor, FLOOR); gl.uniform1f(u.uFade, S * 0.32);
     gl.enable(gl.BLEND);
-    if (!touchOnly) {                                   // reflection first (skipped on phones)
+    {                                                   // the tree's reflection in the ice first
       gl.blendFunc(gl.ONE, gl.ONE); gl.uniform1f(u.uMirror, 0.25);
       if (cB) gl.drawArrays(gl.POINTS, RB, cB); if (cF) gl.drawArrays(gl.POINTS, RF, cF);
       gl.uniform1f(u.uMirror, 1); if (cLT) gl.drawArrays(gl.POINTS, RL, cLT);
@@ -771,8 +1038,24 @@ void main(){
     if (cB) gl.drawArrays(gl.POINTS, RB, cB); if (cF) gl.drawArrays(gl.POINTS, RF, cF);
     gl.blendFunc(gl.ONE, gl.ONE);                       // light adds
     if (cL) gl.drawArrays(gl.POINTS, RL, cL);
-    gl.disable(gl.BLEND);
     gl.disableVertexAttribArray(P.aCol); gl.disableVertexAttribArray(P.aSt); gl.disableVertexAttribArray(P.aSeed);
+    // 4) presents on the ice and the drift of snow at the trunk, painted over the tree's foot
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(P.fg.p); bindQuad();
+    gl.uniform2f(P.fg.u.uRes, W, H); gl.uniform2f(P.fg.u.uC, CX, CY); gl.uniform1f(P.fg.u.uS, S); gl.uniform1f(P.fg.u.uFloor, FLOOR);
+    gl.uniform1f(P.fg.u.uT, T); gl.uniform1f(P.fg.u.uScale, paintRT.w / W); gl.uniform1f(P.fg.u.uWarm, warm);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // 5) falling snow in front of everything
+    if (cS) {
+      gl.useProgram(P.pt.p); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, FL * 4, 0);
+      gl.enableVertexAttribArray(P.aCol); gl.vertexAttribPointer(P.aCol, 4, gl.FLOAT, false, FL * 4, 8);
+      gl.enableVertexAttribArray(P.aSt); gl.vertexAttribPointer(P.aSt, 4, gl.FLOAT, false, FL * 4, 24);
+      gl.enableVertexAttribArray(P.aSeed); gl.vertexAttribPointer(P.aSeed, 1, gl.FLOAT, false, FL * 4, 40);
+      gl.uniform1f(u.uMirror, 0); gl.drawArrays(gl.POINTS, RS, cS);
+      gl.disableVertexAttribArray(P.aCol); gl.disableVertexAttribArray(P.aSt); gl.disableVertexAttribArray(P.aSeed);
+    }
+    gl.disable(gl.BLEND);
     // 4) impasto relief onto the screen
     target(null); gl.useProgram(P.post.p); bindQuad();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, paintRT.tex);
@@ -788,7 +1071,7 @@ void main(){
     gr.addColorStop(0, '#16123a'); gr.addColorStop(0.4, '#080818'); gr.addColorStop(1, '#020206');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     g.globalCompositeOperation = 'lighter';
-    for (const [base, cnt] of [[RB, cB], [RF, cF], [RL, cL]]) for (let j = 0; j < cnt; j++) {
+    for (const [base, cnt] of [[RB, cB], [RF, cF], [RL, cL], [RS, cS]]) for (let j = 0; j < cnt; j++) {
       const o = (base + j) * FL, md = buf[o + 7], s = buf[o + 6] * (md > 2.5 ? 0.9 : 1.6);
       g.globalAlpha = Math.min(1, buf[o + 5] * (md > 2.5 ? 0.6 : 1.3));
       g.drawImage(md > 0.5 && md < 1.5 ? SPRS : SPR, buf[o] - s / 2, buf[o + 1] - s / 2, s, s);
@@ -841,7 +1124,7 @@ void main(){
     const t = performance.now() / 1000, dt = last ? Math.min(0.05, t - last) : 0.016; last = t;
     if (!t0) t0 = t; T = t - t0 + 0.016;
     gestureTick(t * 1000);
-    const hand = gest.on && T - gest.seen < 0.7, gt = hand ? gest.target : 0;
+    const hand = gest.on && T - gest.seen < 1.0, gt = hand ? gest.target : 0;
     gS += (gt - gS) * (1 - Math.exp(-dt * (gt > gS ? 4.5 : 3.2)));
     let steer = 0;
     if (hand) { const off = gest.hx - 0.5; steer = Math.abs(off) < 0.12 ? 0 : (off - Math.sign(off) * 0.12) * 4; }   // move the hand sideways to turn the tree
@@ -934,7 +1217,7 @@ void main(){
     }
     gbar.style.width = (L ? Math.round(gest.open * 100) : 0) + '%';
   }
-  window.__gesture = () => ({ on: gest.on, ready: !!gest.lm, open: +gest.open.toFixed(3), target: +gest.target.toFixed(3), scatter: +gS.toFixed(3), seen: T - gest.seen < 0.7 });
+  window.__gesture = () => ({ on: gest.on, ready: !!gest.lm, open: +gest.open.toFixed(3), target: +gest.target.toFixed(3), scatter: +gS.toFixed(3), seen: T - gest.seen < 1.0 });
   if (reduce || !gl) gbtn.hidden = true;                 // the scatter is motion; and without WebGL there is no cloud to fly into
 
   addEventListener('resize', resize);
